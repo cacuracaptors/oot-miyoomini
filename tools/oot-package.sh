@@ -51,6 +51,8 @@ fi
 cp "$MAP" "$GAME/oot_swapmap.bin" || exit 1
 # pacotes de idioma (opcao idioma no opcoes.txt)
 PORTDIR="$(cd "$(dirname "$0")/.." && pwd)"
+# leia-me do jogador (em ingles), na pasta do jogo
+cp "$PORTDIR/dist/README.txt" "$GAME/README.txt" || exit 1
 if [ -d "$PORTDIR/idiomas" ]; then
     mkdir -p "$GAME/idiomas" && cp "$PORTDIR"/idiomas/*.oot "$GAME/idiomas/" || exit 1
 fi

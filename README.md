@@ -141,7 +141,20 @@ When you update the port to a new version, just replace the files: the game data
 
 With the manual jump turned off (Menu+Start > Controls), the buttons are the original ones: B is the sword,
 Y C-Left, X C-Down, R2 C-Right, L2 C-Up. With "Jump on B" off, X jumps and B is the sword.
-While playing the ocarina: the D-pad plays the C notes, L1/L2 and R1/R2 bend the note (Z and R), B closes.
+### Playing the ocarina
+
+While the ocarina is out, the buttons change so that every note is easy to reach:
+
+| Button | Action |
+|---|---|
+| A | A note |
+| D-pad Up / Down / Left / Right | C-Up / C-Down / C-Left / C-Right notes |
+| L1 or L2 (hold with a note) | Z: the note goes a half step down |
+| R1 or R2 (hold with a note) | R: the note goes a half step up |
+| B or Start | Put the ocarina away |
+
+Link doesn't move while playing, and X, Y and a tap on Select do nothing. Select+D-pad keeps its usual functions
+(brightness, tunic and boots).
 
 ## Known issues
 
