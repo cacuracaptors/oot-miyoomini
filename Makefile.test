@@ -1,0 +1,25 @@
+# Testes da camada de SO no PC.  make -f Makefile.test [run|tsan|clean]
+OOT ?= $(HOME)/fallout-miyoo/oot
+CC  ?= gcc
+CFLAGS = -O1 -g -std=gnu99 -Wall -Wno-unused-function -D_LANGUAGE_C -Iplatform -idirafter $(OOT)/include -pthread
+CORE = platform/os_core.c
+HW   = platform/os_hw.c
+
+all: test_os_core test_os_hw
+
+test_os_core: $(CORE) tests/test_os_core.c platform/os_core.h
+	$(CC) $(CFLAGS) $(CORE) tests/test_os_core.c -o $@
+
+test_os_hw: $(CORE) $(HW) tests/test_os_hw.c platform/os_core.h platform/os_hw.h
+	$(CC) $(CFLAGS) $(CORE) $(HW) tests/test_os_hw.c -o $@
+
+run: all
+	./test_os_core && ./test_os_hw
+
+tsan:
+	$(CC) $(CFLAGS) -fsanitize=thread $(CORE) tests/test_os_core.c -o test_os_core_tsan
+	$(CC) $(CFLAGS) -fsanitize=thread $(CORE) $(HW) tests/test_os_hw.c -o test_os_hw_tsan
+	./test_os_core_tsan && ./test_os_hw_tsan
+
+clean:
+	rm -f test_os_core test_os_hw test_os_core_tsan test_os_hw_tsan

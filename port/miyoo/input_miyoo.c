@@ -1,0 +1,498 @@
+/*
+ * input_miyoo.c -- os botoes do Miyoo Mini Plus viram o controle 1 do N64.
+ *
+ * Le direto do evdev (/dev/input/event0), como no port do Mario Kart 64, toda vez
+ * que o jogo pede os controles (osContStartReadData, uma vez por quadro).
+ *
+ *   (com manual_jump = 1, o padrao)
+ *   A -> A                   B -> pulo (no jogo; nos menus/textos e o B)    Y -> B (espada)
+ *   L2 -> C-esquerda         X -> C-baixo          R2 -> C-direita     toque no SELECT -> C-cima
+ *   SELECT+L1 -> L (minimapa)       (jump_on_b = 0: X pula, B espada, Y C-esquerda, L2 C-baixo)
+ *   (com manual_jump = 0, como antes)
+ *   A -> A                   B -> B
+ *   Y -> C-esquerda          X -> C-baixo          R2 -> C-direita     L2 -> C-cima
+ *   L1 -> Z (mirar)          R1 -> R (escudo)
+ *   START -> START           SELECT (um toque, sozinho) -> L (liga/desliga o mapa)
+ *   SELECT segurado + direcional -> direcional do N64 (o port usa: direita troca as botas,
+ *   esquerda troca a tunica; opcao atalho_roupa)
+ *   direcional -> analogico (o OoT de varejo nao usa o D-pad do N64)
+ *   MENU sozinho (sem nenhuma outra tecla junto): toque, segurar (0,7 s) e dois toques (em 0,3 s) fazem o que o
+ *   Tweaks > Shortcuts do OnionOS manda para os jogos (padrao: Game Switcher, voltar ao menu, jogo anterior),
+ *   salvando antes o estado para o Game Switcher continuar dele (port/savestate.c). Fora do OnionOS: toque fecha.
+ *   MENU+POWER e o print de tela do OnionOS: nao faz nada disso.
+ *   SELECT+cima / SELECT+baixo: brilho (gamma) +1 / -1 (0 a 10), gravado no options.txt.
+ *   MENU+R2 / MENU+L2: salva / carrega o estado rapido (saves/state_quick.oss).
+ *   SELECT+A segurados: pulo da lua (so com o cheat cheat_moon_jump_on_l).
+ *   SELECT+Y: grava o proximo quadro (captura_NN.cap e .png) para depurar defeitos de imagem.
+ *   SELECT+R1: grava a medicao detalhada dos nucleos (perf_NN.bin; so com a opcao perf_trace).
+ */
+#include <fcntl.h>
+#include <math.h>
+#include <linux/input.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
+
+#include "miyoo.h"
+#include "os_hw.h"
+
+void gfx_request_capture(void); /* gfx/gfx_hook.c */
+extern int port_opt_cheat_moon_jump_on_l, port_input_select_a; /* port_options.c */
+extern int gx_brilho;            /* gfx/gfx_rdp.c */
+extern int port_opt_segurar_b, port_text_open, port_text_choice; /* port_options.c */
+void port_options_save(void);     /* port_options.c */
+extern int port_opt_manual_jump, port_opt_jump_on_b, port_input_jump, port_input_frames, port_jump_stamp, port_jump_mode;
+
+enum { K_UP, K_DOWN, K_LEFT, K_RIGHT, K_A, K_B, K_X, K_Y, K_L1, K_R1, K_L2, K_R2, K_START, K_SELECT, K_MENU, K_COUNT };
+
+int port_opt_direcional_suave = 40; /* opcoes.txt: ms para a direcao girar 45 graus (0 = desligado) */
+static int ev_fd = -1;
+static unsigned char held[K_COUNT];
+static unsigned char down_any[KEY_MAX / 8 + 1]; /* todas as teclas apertadas agora */
+static int menu_down, menu_mixed;
+static int start_eaten; /* o START do MENU+START (o "START sozinho" do menu nao conta) */
+/* MENU sozinho, medido como o keymon do OnionOS mede para o RetroArch: segurar >= 0,7 s; um segundo toque em ate
+ * 0,3 s depois do primeiro e o duplo (o toque simples so espera esse tempo quando o duplo faz alguma coisa) */
+#define MENU_LONG_MS 700.0
+#define MENU_DOUBLE_MS 300.0
+static double menu_press_t;
+static int menu_long_done, menu_single_wait, menu_skip_release;
+void port_ss_menu(int press);        /* port/savestate.c: 0 toque, 1 segurar, 2 dois toques */
+int port_ss_menu_double_used(void);
+void port_ss_input_tick(void);
+int port_res_hold; /* gfx_hires.c: resolucao dinamica parada (print de tela) */
+
+static int key_index(int code) {
+    switch (code) {
+        case KEY_UP: return K_UP;
+        case KEY_DOWN: return K_DOWN;
+        case KEY_LEFT: return K_LEFT;
+        case KEY_RIGHT: return K_RIGHT;
+        case KEY_SPACE: return K_A;
+        case KEY_LEFTCTRL: return K_B;
+        case KEY_LEFTSHIFT: return K_X;
+        case KEY_LEFTALT: return K_Y;
+        case KEY_E: return K_L1;
+        case KEY_T: return K_R1;
+        case KEY_TAB: return K_L2;
+        case KEY_BACKSPACE: return K_R2;
+        case KEY_ENTER: return K_START;
+        case KEY_RIGHTCTRL: return K_SELECT;
+        case KEY_ESC: return K_MENU;
+        default: return -1;
+    }
+}
+
+static int others_down(void) {
+    int i;
+    for (i = 0; i < (int)sizeof down_any; i++) {
+        unsigned char m = down_any[i];
+        if (i == KEY_ESC / 8) {
+            m &= (unsigned char)~(1u << (KEY_ESC % 8));
+        }
+        if (m) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void poll_keys(void) {
+    struct input_event ev[32];
+    if (ev_fd < 0) {
+        return;
+    }
+    for (;;) {
+        ssize_t r = read(ev_fd, ev, sizeof ev);
+        int n, i;
+        if (r <= 0) {
+            break;
+        }
+        n = (int)(r / (ssize_t)sizeof ev[0]);
+        for (i = 0; i < n; i++) {
+            int code = ev[i].code, k;
+            if (ev[i].type != EV_KEY) {
+                continue;
+            }
+            if (code >= 0 && code < KEY_MAX) {
+                if (ev[i].value) {
+                    down_any[code / 8] |= (unsigned char)(1u << (code % 8));
+                } else {
+                    down_any[code / 8] &= (unsigned char)~(1u << (code % 8));
+                }
+            }
+            if (code == KEY_ESC && ev[i].value == 1) { /* MENU apertado */
+                const double now = miyoo_now_ms();
+                if (menu_single_wait && now - menu_press_t <= MENU_DOUBLE_MS) {
+                    menu_single_wait = 0; /* o segundo toque: duplo */
+                    menu_skip_release = 1;
+                    fprintf(stderr, "botoes: MENU (dois toques)\n");
+                    port_ss_menu(2);
+                } else {
+                    menu_skip_release = 0;
+                }
+                menu_down = 1;
+                menu_mixed = others_down();
+                menu_long_done = 0;
+                menu_press_t = now;
+            } else if (code == KEY_ESC && ev[i].value == 0) { /* MENU solto */
+                if (menu_down && !menu_mixed && !menu_long_done && !menu_skip_release && !others_down()) {
+                    if (port_ss_menu_double_used()) {
+                        menu_single_wait = 1; /* toque simples, a menos que venha um segundo */
+                    } else {
+                        fprintf(stderr, "botoes: MENU (toque)\n");
+                        port_ss_menu(0);
+                    }
+                }
+                menu_down = 0;
+                menu_skip_release = 0;
+            } else if (code != KEY_ESC && ev[i].value == 1 && menu_down) {
+                menu_mixed = 1; /* outra tecla junto com o MENU (POWER: print do OnionOS) */
+                if (code == KEY_ENTER) { /* MENU+START: menu de opcoes (menu_miyoo.c) */
+                    start_eaten = 1; /* este START ja foi usado: nao fecha (nem responde "nao") de novo */
+                    if (miyoo_menu_active()) {
+                        miyoo_menu_close();
+                    } else {
+                        miyoo_menu_open();
+                    }
+                } else if (code == KEY_BACKSPACE) { /* MENU+R2: salva o estado rapido (port/savestate.c) */
+                    extern volatile int port_ss_req;
+                    port_ss_req = 1;
+                } else if (code == KEY_TAB) { /* MENU+L2: carrega o estado rapido */
+                    extern volatile int port_ss_req;
+                    port_ss_req = 2;
+                }
+            }
+            k = key_index(code);
+            if (k >= 0) {
+                held[k] = ev[i].value != 0; /* 1 aperta, 2 repete, 0 solta */
+            }
+        }
+        if (n < 32) {
+            break;
+        }
+    }
+}
+
+/* menu de opcoes aberto: os botoes vao para ele (com repeticao no direcional), nada chega ao jogo */
+static int menu_fresh = 1; /* o menu acabou de abrir: o que ja estava apertado nao conta */
+static void menu_input(void) {
+    static unsigned char was[K_COUNT];
+    static double next[K_COUNT];
+    static const struct { int key, act, rep; } map[] = {
+        { K_UP, MENU_K_UP, 1 },        { K_DOWN, MENU_K_DOWN, 1 },     { K_LEFT, MENU_K_LEFT, 1 },
+        { K_RIGHT, MENU_K_RIGHT, 1 },  { K_A, MENU_K_A, 0 },           { K_L1, MENU_K_TAB_PREV, 0 },
+        { K_R1, MENU_K_TAB_NEXT, 0 },  { K_L2, MENU_K_TAB_PREV, 0 },   { K_R2, MENU_K_TAB_NEXT, 0 },
+        { K_B, MENU_K_CLOSE, 0 },
+        { K_X, MENU_K_X, 0 },
+    };
+    const double now = miyoo_now_ms();
+    int i;
+    if (menu_fresh) {
+        memcpy(was, held, sizeof was);
+        menu_fresh = 0;
+    }
+    for (i = 0; i < (int)(sizeof map / sizeof map[0]); i++) {
+        const int k = map[i].key;
+        if (menu_down) {
+            was[k] = held[k]; /* (MENU segurado: MENU+L2/R2 sao do estado rapido) */
+            continue;
+        }
+        if (held[k] && !was[k]) {
+            miyoo_menu_key(map[i].act);
+            next[k] = now + 350.0;
+        } else if (held[k] && map[i].rep && now >= next[k]) {
+            miyoo_menu_key(map[i].act);
+            next[k] = now + 70.0;
+        }
+        was[k] = held[k];
+    }
+    {
+        /* START sozinho tambem fecha (MENU+START e tratado na leitura dos eventos) */
+        static unsigned char startWas = 1;
+        if (!held[K_START]) {
+            start_eaten = 0;
+        }
+        if (held[K_START] && !startWas && !menu_down && !start_eaten) {
+            miyoo_menu_close();
+        }
+        startWas = held[K_START];
+    }
+}
+
+static void read_pads(OSContPad pads[4]) {
+    unsigned short b = 0;
+    int dx = 0, dy = 0;
+    memset(pads, 0, 4 * sizeof(OSContPad));
+    poll_keys();
+    if (miyoo_menu_active()) {
+        menu_input();
+        port_ss_input_tick();
+        miyoo_rumble_tick();
+        return;
+    }
+    menu_fresh = 1;
+    {
+        const double now = miyoo_now_ms();
+        if (menu_down && !menu_mixed && !menu_long_done && !menu_skip_release && now - menu_press_t >= MENU_LONG_MS) {
+            menu_long_done = 1; /* segurado */
+            if (!others_down()) {
+                fprintf(stderr, "botoes: MENU (segurado)\n");
+                port_ss_menu(1);
+            }
+        }
+        if (menu_single_wait && now - menu_press_t > MENU_DOUBLE_MS) {
+            menu_single_wait = 0;
+            fprintf(stderr, "botoes: MENU (toque)\n");
+            port_ss_menu(0);
+        }
+    }
+    port_ss_input_tick(); /* MENU, bateria no fim e desligar viram pedidos ao jogo (port/savestate.c) */
+    miyoo_rumble_tick();  /* (o motor nunca fica ligado mais de 3 s seguidos) */
+
+    /* pulo manual (opcao manual_jump): um botao vira o pulo durante o jogo (o jogo avisa em port_jump_mode, a cada
+     * quadro, quando Link pode agir: fora do menu de pausa e sem caixa de texto); nos menus, textos e telas fora do
+     * jogo ele volta a ser o B do N64 (cancelar, passar texto). Com o pulo, L2 vira C-baixo, o toque no SELECT vira
+     * C-cima e SELECT+baixo liga/desliga o minimapa (L). jump_on_b = 1: B pula, Y e a espada, L2 C-esquerda, X C-baixo; 0: X pula, B espada, Y C-esquerda, L2 C-baixo. */
+    int jumpOn = port_opt_manual_jump != 0;
+    int jumpKey = port_opt_jump_on_b ? K_B : K_X, swordKey = port_opt_jump_on_b ? K_Y : K_B;
+    /* itens: com o pulo no B, C-esquerda no L2 e C-baixo no X (C-direita no R2, como antes) */
+    int cleftKey = (jumpOn && port_opt_jump_on_b) ? K_L2 : K_Y;
+    int cdownKey = !jumpOn ? K_X : port_opt_jump_on_b ? K_X : K_L2;
+    int inPlay;
+    port_input_frames++;
+    inPlay = jumpOn && port_jump_mode && (port_input_frames - port_jump_stamp) <= 12; /* (leituras a 60 Hz, jogo a 20) */
+    {
+        /* o botao de pulo apertado como B (texto, menu, cena) continua B ate ser solto: segurar B passa varias falas
+         * seguidas sem parar no intervalo entre uma caixa e outra (quando o jogo volta a liberar o pulo por um quadro) */
+        static int asB;
+        if (!held[jumpKey]) {
+            asB = 0;
+        } else if (!inPlay) {
+            asB = 1;
+        }
+        if (asB) {
+            inPlay = 0;
+        }
+    }
+    port_input_jump = jumpOn && inPlay && held[jumpKey];
+    if (held[K_A]) b |= PORT_BTN_A;
+    if (jumpOn) {
+        if ((held[swordKey] && !(swordKey == K_Y && held[K_SELECT])) || (held[jumpKey] && !inPlay)) b |= PORT_BTN_B;
+    } else if (held[K_B]) {
+        b |= PORT_BTN_B;
+    }
+    {
+        /* segurar B nas falas (opcao hold_b_fast_text): depois de meio segundo segurando, com uma caixa de texto
+         * aberta (que nao seja de escolha), o B vira toques seguidos (solto 1 leitura a cada 3). Assim toda parte do
+         * jogo que espera um toque novo (fim da mensagem, cenas, atores) passa sozinha, como tocar B rapido. */
+        static int bHeldReads;
+        int bKey = jumpOn ? jumpKey : K_B;
+        if (held[bKey] && (b & PORT_BTN_B) && port_opt_segurar_b && port_text_open && !port_text_choice &&
+            (port_input_frames - port_jump_stamp) <= 12) {
+            bHeldReads++;
+            if (bHeldReads > 10 && (bHeldReads % 3) == 0) {
+                b &= ~PORT_BTN_B;
+            }
+        } else if (!held[bKey]) {
+            bHeldReads = 0;
+        }
+    }
+    {
+        /* SELECT+Y: grava o proximo quadro (captura_NN.cap/.png na pasta do jogo) para depurar;
+         * com SELECT apertado o Y nao chega ao jogo */
+        static int cap_was;
+        int cap = held[K_SELECT] && held[K_Y];
+        if (cap && !cap_was) {
+            gfx_request_capture();
+        }
+        cap_was = cap;
+    }
+    if (held[cleftKey] && !(cleftKey == K_Y && held[K_SELECT])) b |= PORT_BTN_CLEFT;
+    if (held[cdownKey]) b |= PORT_BTN_CDOWN;
+    if (!jumpOn && held[K_L2]) b |= PORT_BTN_CUP;
+    if (held[K_R2]) b |= PORT_BTN_CRIGHT;
+    if (held[K_L1]) b |= PORT_BTN_Z;
+    if (held[K_R1]) b |= PORT_BTN_R;
+    if (held[K_START]) b |= PORT_BTN_START;
+
+    dx = (held[K_RIGHT] ? 1 : 0) - (held[K_LEFT] ? 1 : 0);
+    dy = (held[K_UP] ? 1 : 0) - (held[K_DOWN] ? 1 : 0);
+    {
+        /* SELECT segurado: o direcional vira o D-pad do N64 (e Link fica parado). SELECT sozinho
+         * (apertar e soltar sem outra tecla) vira um toque no L, que dura 120 ms para o jogo ver. */
+        static int sel_was, sel_used;
+        static long long l_until, cup_until;
+        struct timespec ts;
+        long long now;
+        int sel = held[K_SELECT];
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        now = (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+        if (sel && !sel_was) {
+            sel_used = 0;
+        }
+        if (sel) {
+            static int down_was;
+            static int up_was;
+            if (held[K_UP]) b |= PORT_BTN_DUP;
+            if (held[K_UP] && !up_was) { /* SELECT+cima: brilho (gamma) +1, ate 10; fica gravado no options.txt */
+                if (gx_brilho < 10) {
+                    gx_brilho++;
+                    port_options_save();
+                }
+            }
+            up_was = held[K_UP];
+            if (held[K_DOWN] && !down_was) { /* SELECT+baixo: brilho (gamma) -1, ate 0 */
+                if (gx_brilho > 0) {
+                    gx_brilho--;
+                    port_options_save();
+                }
+            }
+            down_was = held[K_DOWN];
+            if (jumpOn) {
+                static int l1_was;
+                if (held[K_L1] && !l1_was) {
+                    l_until = now + 120; /* SELECT+L1: minimapa (L) */
+                }
+                l1_was = held[K_L1];
+                b &= ~PORT_BTN_Z; /* (o L1 com SELECT nao mira) */
+            } else if (held[K_DOWN]) {
+                b |= PORT_BTN_DDOWN;
+            }
+            if (held[K_LEFT]) b |= PORT_BTN_DLEFT;
+            if (held[K_RIGHT]) b |= PORT_BTN_DRIGHT;
+            if (dx || dy || held[K_Y] || held[K_A] || held[K_B] || held[K_X] || held[K_L1]) {
+                sel_used = 1;
+            }
+            {
+                /* SELECT+R1: grava a medicao detalhada dos nucleos (opcao perf_trace) */
+                static int r1_was;
+                if (held[K_R1] && !r1_was) {
+                    extern int port_opt_perf_trace;
+                    extern void pt_request_dump(void);
+                    if (port_opt_perf_trace) {
+                        pt_request_dump();
+                    }
+                }
+                r1_was = held[K_R1];
+                if (held[K_R1]) {
+                    sel_used = 1;
+                    b &= ~PORT_BTN_R; /* (o R1 com SELECT nao levanta o escudo) */
+                }
+            }
+            if (held[K_A] && port_opt_cheat_moon_jump_on_l) {
+                b &= ~PORT_BTN_A; /* SELECT+A: pulo da lua (cheat), o A nao chega ao jogo */
+            }
+            dx = dy = 0;
+        } else if (sel_was && !sel_used) {
+            if (jumpOn) {
+                cup_until = now + 120; /* toque no SELECT: C-cima (com o pulo manual) */
+            } else {
+                l_until = now + 120;
+            }
+        }
+        sel_was = sel;
+        port_input_select_a = sel && held[K_A];
+        if (now < l_until) b |= PORT_BTN_L;
+        if (now < cup_until) b |= PORT_BTN_CUP;
+    }
+    {
+        /* ocarina na mao (o som da ocarina ligado, src/audio/game/general.c): o direcional toca as notas dos botoes C
+         * (cima/baixo/esquerda/direita = C-cima/baixo/esquerda/direita) e Link nao anda nem entorta a nota; o START
+         * fecha a ocarina (como o B). Os outros botoes continuam iguais. Com SELECT apertado, o SELECT+direcional de
+         * sempre (brilho...). */
+        extern s8 sOcarinaInstrumentId;
+        extern u8 sIsOcarinaInputEnabled;
+        if (sOcarinaInstrumentId != 0 && !held[K_SELECT]) {
+            /* o que a tela mostra e o que se aperta: A = nota A, B = fecha (B do N64), direcional = notas C; os outros
+             * botoes (X, Y, toque no SELECT) nao fazem nada enquanto a ocarina esta na mao */
+            b &= ~(PORT_BTN_A | PORT_BTN_B | PORT_BTN_CUP | PORT_BTN_CDOWN | PORT_BTN_CLEFT | PORT_BTN_CRIGHT);
+            if (held[K_A]) b |= PORT_BTN_A;
+            if (held[K_B]) b |= PORT_BTN_B;
+            if (held[K_UP]) b |= PORT_BTN_CUP;
+            if (held[K_DOWN]) b |= PORT_BTN_CDOWN;
+            if (held[K_LEFT]) b |= PORT_BTN_CLEFT;
+            if (held[K_RIGHT]) b |= PORT_BTN_CRIGHT;
+            /* lote 127: os gatilhos fazem o Z e o R do N64 na ocarina (src/audio/game/general.c): L1 ou L2 = Z (a nota
+             * desce meio tom), R1 ou R2 = R (a nota sobe meio tom), segurados junto com a nota, para tocar musicas
+             * de verdade. O B continua fechando. */
+            b &= ~(PORT_BTN_Z | PORT_BTN_R);
+            if (held[K_L1] || held[K_L2]) b |= PORT_BTN_Z;
+            if (held[K_R1] || held[K_R2]) b |= PORT_BTN_R;
+            dx = dy = 0;
+            port_input_jump = 0; /* (o B nao pula) */
+            if (sIsOcarinaInputEnabled && held[K_START]) {
+                b = (b & ~PORT_BTN_START) | PORT_BTN_B;
+            }
+        }
+    }
+    if (menu_down) {
+        b = 0; /* nada chega ao jogo enquanto o MENU esta apertado */
+        dx = dy = 0;
+    }
+    {
+        /* print de tela do OnionOS (MENU+POWER): enquanto o MENU esta apertado e por ~3 s depois do print, a resolucao
+         * dinamica nao muda (gfx_hires.c): o programa do print rouba processador, o desenho atrasa e a resolucao caia
+         * antes de a tela ser lida (o print saia na resolucao baixa). Alguns quadros atrasados nesse meio tempo. */
+        static int s_menuWas, s_holdUntil;
+        if (menu_down && menu_mixed) {
+            s_holdUntil = port_input_frames + 180;
+        }
+        port_res_hold = menu_down || (s_menuWas && menu_mixed) || (port_input_frames - s_holdUntil) < 0;
+        s_menuWas = menu_down;
+    }
+
+    pads[0].button = b;
+    if (port_opt_direcional_suave > 0) {
+        /* direcional_suave: so a DIRECAO gira aos poucos (45 graus a cada N ms) ate a do direcional; a forca
+         * (76, a mesma nas 8 direcoes) e a parada sao na hora. Partindo do zero ou virando mais de 90 graus
+         * (meia-volta), vai direto, como o analogico de verdade passando pelo meio. */
+        static float ang;
+        static int moving;
+        static long long last;
+        struct timespec ts;
+        long long now;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        now = (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+        if (!dx && !dy) {
+            moving = 0;
+            pads[0].stick_x = 0;
+            pads[0].stick_y = 0;
+        } else {
+            const float target = atan2f((float)dy, (float)dx);
+            float d = target - ang;
+            while (d > (float)M_PI) d -= 2.0f * (float)M_PI;
+            while (d < -(float)M_PI) d += 2.0f * (float)M_PI;
+            if (!moving || fabsf(d) > (float)M_PI * 0.51f) {
+                ang = target;
+            } else {
+                long long dt = now - last;
+                float step;
+                if (dt > 100) dt = 100;
+                if (dt < 0) dt = 0;
+                step = (float)M_PI / 4.0f * (float)dt / (float)port_opt_direcional_suave;
+                ang += fabsf(d) <= step ? d : (d > 0 ? step : -step);
+            }
+            moving = 1;
+            pads[0].stick_x = (s8)lrintf(76.0f * cosf(ang));
+            pads[0].stick_y = (s8)lrintf(76.0f * sinf(ang));
+        }
+        last = now;
+    } else if (dx && dy) { /* diagonal: mesma forca que uma direcao so */
+        pads[0].stick_x = (s8)(dx * 54);
+        pads[0].stick_y = (s8)(dy * 54);
+    } else {
+        pads[0].stick_x = (s8)(dx * 76);
+        pads[0].stick_y = (s8)(dy * 76);
+    }
+}
+
+void miyoo_input_init(void) {
+    ev_fd = open("/dev/input/event0", O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (ev_fd < 0) {
+        fprintf(stderr, "botoes: sem /dev/input/event0\n");
+    }
+    port_hooks.read_pads = read_pads;
+    port_hooks.pads_connected = 1;
+}

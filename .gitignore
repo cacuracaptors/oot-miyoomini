@@ -1,0 +1,17 @@
+# test programs built on the PC (make -f Makefile.test)
+test_os_core
+test_os_hw
+test_os_*_tsan
+__pycache__/
+*.pyc
+*.o
+# old notes (replaced by README.md)
+LEIA-ME.txt
+# game data must never go to the repository
+*.z64
+*.n64
+*.v64
+*.zip
+*.cart
+*.rcp
+*.pak
