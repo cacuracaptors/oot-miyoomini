@@ -24,7 +24,7 @@ from your European ROM.
 - A software renderer made for the Miyoo Mini Plus, using both CPU cores, with a smooth texture filter and color
   dithering
 - The HUD, the dialog boxes and the title logo are drawn by the chip's 2D engine at full 640x480 (sharp text)
-- A new HD title logo (the original "1998 Nintendo" line is kept)
+- A new HD title logo
 - Adjustable brightness (gamma) without any cost: Select+Up/Down during the game
 - CPU clock picked by device (1800 MHz on the Mini Plus, 1600 MHz on the Mini, Mini v4 and Mini Flip), kept
   there during the game
