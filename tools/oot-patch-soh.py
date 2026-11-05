@@ -2272,6 +2272,23 @@ void Player_Action_Roll(Player* this, PlayState* play) {
      "                }\n\n"
      "                // `speedTarget` at this point is the speed that would be used for regular walking.\n"),
 ])
+# port: corrida sem a paradinha ao aterrissar. Correndo (A segurado depois da rolada) e pulando, ao tocar o chao o
+# jogo poe a animacao de aterrissar (run_jump_end / short_landing) com o Link parado ate ela acabar. Com a corrida
+# ligada, o A ainda apertado e o direcional para algum lado, ele volta direto a correr (como no fim da rolada,
+# Port_SprintFromRoll). So sem dano de queda, sem o pulo de ataque e sem mirar/carregar algo.
+patch_file("src/overlays/actors/ovl_player_actor/z_player.c", [
+    ("corrida sem paradinha ao aterrissar (declaracao)",
+     "void Player_Action_8084411C(Player* this, PlayState* play) {\n",
+     "static s32 Port_SprintFromRoll(Player* this, PlayState* play); /* port */\n"
+     "void Player_Action_8084411C(Player* this, PlayState* play) {\n"),
+    ("corrida sem paradinha ao aterrissar",
+     "        sp3C = func_80843E64(play, this);\n\n",
+     "        sp3C = func_80843E64(play, this);\n\n"
+     "        if ((sp3C == 0) && !(this->stateFlags2 & PLAYER_STATE2_19) && !Player_CheckHostileLockOn(this) &&\n"
+     "            !(this->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) && Port_SprintFromRoll(this, play)) {\n"
+     "            return; /* port: direto para a corrida */\n"
+     "        }\n"),
+])
 patch_file("src/overlays/actors/ovl_player_actor/z_player.c", [
     ("pulo manual (funcao)", "void Player_Update(Actor* thisx, PlayState* play) {\n",
      PORT_JUMP + "void Player_Update(Actor* thisx, PlayState* play) {\n"),
