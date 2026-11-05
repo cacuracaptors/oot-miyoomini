@@ -14,8 +14,10 @@ from your European ROM.
 
 ### Graphics and performance
 
-- Native 640x480 with dynamic resolution: the 3D picture gets sharper or softer by itself to keep the game smooth
-  (from 640 down to 320 pixels wide, as on the N64), with a target frame time you can choose
+- - Native 640x480 with dynamic resolution: the 3D picture gets sharper or softer by itself to keep the game smooth,
+  with a target frame time you can choose. It can go from 640 down to 320 pixels wide (as on the N64), but in
+  practice it rarely drops much: most of the time it stays at or near the full 640, and only goes down a little in
+  the busiest areas
 - 30 FPS: the game's 20 FPS are interpolated to 30 frames per second (in-between frames for everything that
   moves: actors, the camera, effects, scrolling textures, skinned models like Epona), with optional steps between
   30 and 20 FPS in the heaviest places
