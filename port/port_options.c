@@ -31,6 +31,7 @@ int port_opt_atalho_roupa = 1;   /* SELECT+direita/esquerda troca botas/tunica *
 int port_opt_inverter_mira = 1;  /* primeira pessoa: para cima olha para cima */
 int port_opt_mira_suave = 1;     /* primeira pessoa: aceleracao no direcional */
 int port_opt_caixas_opacas = 0;  /* caixas de dialogo e minimapa sem transparencia */
+int port_opt_retro_brightness_base = -1; /* brilho de antes do filtro retro (menu_miyoo.c); -1 = nenhum */
 int port_opt_halo_folga = 600;   /* folga do teste de profundidade dos halos de luz (z do jogo, 15.3) */
 /* melhorias do Ship of Harkinian (tools/oot-patch-soh.py) */
 int port_opt_remember_save_location = 0;
@@ -473,9 +474,11 @@ static const struct {
     { "Graphics", "max_resolution", "resolucao", &gx_hr_max_opt,
       "maximum width of the 3D image: 640 (640x480) down to 320 (320x240, like the N64), in steps of 32. Above 320 the resolution is dynamic: it steps down in heavy scenes and back up in light ones. With retro_filter on it stays at 320" },
     { "Graphics", "retro_filter", "", &gx_retro,
-      "retro filter (CRT TV look): 1 = scanlines, 2 = scanlines and an RGB mask; 0 = off. The game is drawn at 320x240 like the N64 (max_resolution is not used) and every game line takes 2 screen lines, so the scanlines match the game's lines" },
+      "retro filter (CRT TV look): 1 = scanlines, 2 = scanlines and an RGB mask; 0 = off. The game is drawn at 320x240 like the N64 (max_resolution is not used) and every game line takes 2 screen lines, so the scanlines match the game's lines. Turning it on in the menu raises the brightness by 3 (scanlines) or 4 (scanlines and mask); turning it off brings back the brightness from before" },
     { "Graphics", "retro_filter_strength", "", &gx_retro_forca,
       "retro filter: how much the scanlines (and the mask) darken, in % (25 to 75; 50 = default)" },
+    { "Graphics", "retro_filter_brightness_base", "", &port_opt_retro_brightness_base,
+      "(set by the game) brightness from before the retro filter was turned on in the menu, restored when it is turned off; -1 = none" },
     { "Graphics", "resolution_target_ms", "resolucao_alvo", &gx_hr_alvo,
       "dynamic resolution: drawing time (ms) it tries not to exceed. Lower = steps down sooner (smoother, less sharp); 30 = default" },
     { "Graphics", "brightness", "", &gx_brilho,
@@ -829,6 +832,7 @@ static const struct {
     { "max_resolution", 640 },
     { "retro_filter", 0 },
     { "retro_filter_strength", 50 },
+    { "retro_filter_brightness_base", -1 },
     { "resolution_target_ms", 30 },
     { "brightness", 0 },
     { "texture_filter", 1 },

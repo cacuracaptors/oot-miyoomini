@@ -556,6 +556,28 @@ void miyoo_menu_close(void) {
     miyoo_menu_close_now();
 }
 
+/* filtro retro: as linhas (e a mascara) escurecem a imagem, entao o brilho sobe sozinho ao ligar (3 com linhas, 4 com
+ * mascara; o jogador ainda pode mudar) e volta ao valor de antes do filtro ao desligar (guardado no options.txt) */
+static void retro_brightness(int from, int to) {
+    extern int gx_brilho, port_opt_retro_brightness_base; /* gfx_rdp.c, port_options.c */
+    static const int k_up[3] = { 0, 3, 4 };
+    from = from < 0 ? 0 : from > 2 ? 2 : from;
+    to = to < 0 ? 0 : to > 2 ? 2 : to;
+    if (from == 0 && to != 0) {
+        port_opt_retro_brightness_base = gx_brilho;
+        gx_brilho += k_up[to];
+    } else if (to == 0) {
+        if (port_opt_retro_brightness_base >= 0) {
+            gx_brilho = port_opt_retro_brightness_base;
+        }
+        port_opt_retro_brightness_base = -1;
+    } else {
+        gx_brilho += k_up[to] - k_up[from];
+    }
+    gx_brilho = gx_brilho < 0 ? 0 : gx_brilho > 10 ? 10 : gx_brilho;
+    fprintf(stderr, "menu: filtro retro %d -> %d: brilho %d\n", from, to, gx_brilho);
+}
+
 static void change(const Item* it, int dir) {
     int* v;
     int x;
@@ -600,9 +622,13 @@ static void change(const Item* it, int dir) {
                  ++tries < 6);
     }
     if (x != *v) {
+        const int from = *v;
         *v = x;
         g_changed = 1;
         fprintf(stderr, "menu: %s = %d\n", it->name, x);
+        if (!strcmp(it->name, "retro_filter")) {
+            retro_brightness(from, x);
+        }
     }
 }
 
