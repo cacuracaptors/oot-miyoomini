@@ -34,12 +34,12 @@ from your European ROM.
 
 ### Controls
 
+- Real vibration (Rumble Pak), Stone of Agony included
 - A manual jump button, with an adjustable jump strength and an optional automatic jump at ledges
 - Smooth D-pad turning (Link turns in smooth curves, like with an analog stick)
 - Natural aiming (up looks up) and smooth aiming, for first person, the slingshot, the bow and the hookshot
 - Sprint: keep holding A after a roll
 - Ocarina on the D-pad (C buttons) and the shoulder buttons (Z and R bend the note)
-- Real vibration (Rumble Pak), Stone of Agony included
 - Select+Left/Right switches tunics and boots without opening the pause menu
 
 ### Languages
