@@ -20,7 +20,7 @@ from your European ROM.
   the busiest areas
 - 30 FPS: the game's 20 FPS are interpolated to 30 frames per second (in-between frames for everything that
   moves: actors, the camera, effects, scrolling textures, skinned models like Epona), with optional steps between
-  30 and 20 FPS in the heaviest places
+  30 and 20 FPS in the heaviest scenes
 - A software renderer made for the Miyoo Mini Plus, using both CPU cores, with a smooth texture filter and color
   dithering
 - The HUD, the dialog boxes and the title logo are drawn by the chip's 2D engine at full 640x480 (sharp text)
