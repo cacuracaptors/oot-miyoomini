@@ -59,6 +59,8 @@ fi
 
 cat > "$P/Roms/PORTS/Shortcuts/Zelda - Ocarina of Time.port" <<'PORT'
 #!/bin/sh
+# clear the screen first (the Game Switcher's picture of the last scene stays in the screen memory)
+cat /dev/zero > /dev/fb0 2>/dev/null
 GameName="Zelda - Ocarina of Time"
 GameDir="ZeldaOoT"
 GameExecutable="oot"
