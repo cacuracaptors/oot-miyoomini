@@ -2272,6 +2272,37 @@ void Player_Action_Roll(Player* this, PlayState* play) {
      "                }\n\n"
      "                // `speedTarget` at this point is the speed that would be used for regular walking.\n"),
 ])
+# port: opcao air_steering (Controls): no ar (pulo ou queda), o direcional vira o Link aos poucos (~4 graus por quadro,
+# como a rolada com better_roll), mas no maximo 45 graus para cada lado da direcao em que ele saiu do chao: so um
+# direcionamento, nao uma curva no ar. Sem mira (Z) e sem o pulo de ataque (ficam como no jogo).
+patch_file("src/overlays/actors/ovl_player_actor/z_player.c", [
+    ("direcao no ar (funcao)",
+     "void Player_Action_8084411C(Player* this, PlayState* play) {\n",
+     """static void Port_AirSteer(Player* this, PlayState* play, f32 speedTarget, s16 yawTarget) { /* port */
+    static s16 sBaseYaw;
+    static u32 sLastFrame;
+    s16 d;
+
+    if (play->gameplayFrames != sLastFrame + 1) {
+        sBaseYaw = this->actor.shape.rot.y; /* saiu do chao agora: a direcao de partida */
+    }
+    sLastFrame = play->gameplayFrames;
+    if (!({ extern int port_opt_air_steering; port_opt_air_steering; }) || (speedTarget == 0.0f) ||
+        (this->focusActor != NULL) || Player_IsZTargeting(this)) {
+        return;
+    }
+    d = yawTarget - sBaseYaw;
+    d = CLAMP(d, -0x2000, 0x2000); /* no maximo 45 graus da direcao de partida */
+    Math_ScaledStepToS(&this->actor.shape.rot.y, sBaseYaw + d, 0x300);
+    this->yaw = this->actor.shape.rot.y;
+}
+
+void Player_Action_8084411C(Player* this, PlayState* play) {\n"""),
+    ("direcao no ar (chamada)",
+     "        if (!(this->stateFlags2 & PLAYER_STATE2_19)) {\n            func_8083DFE0(this, &speedTarget, &yawTarget);\n        }\n",
+     "        if (!(this->stateFlags2 & PLAYER_STATE2_19)) {\n            func_8083DFE0(this, &speedTarget, &yawTarget);\n"
+     "            Port_AirSteer(this, play, speedTarget, yawTarget); /* port: opcao air_steering */\n        }\n"),
+])
 # port: corrida sem a paradinha ao aterrissar. Correndo (A segurado depois da rolada) e pulando, ao tocar o chao o
 # jogo poe a animacao de aterrissar (run_jump_end / short_landing) com o Link parado ate ela acabar. Com a corrida
 # ligada, o A ainda apertado e o direcional para algum lado, ele volta direto a correr (como no fim da rolada,

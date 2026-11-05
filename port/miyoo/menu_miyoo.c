@@ -78,6 +78,7 @@ static const Item k_items[] = {
     T(TAB_CONTROLS, "manual_jump", "Manual jump button", "Botão de pulo"),
     T(TAB_CONTROLS, "auto_jump", "Automatic jump", "Pulo automático"),
     R(TAB_CONTROLS, "jump_strength", "Jump strength (x10)", "Força do pulo (x10)", 40, 120, 2),
+    T(TAB_CONTROLS, "air_steering", "Mid-air steering", "Direção no ar"),
     R(TAB_CONTROLS, "sprint_speed", "Sprint speed (%)", "Corrida (% da velocidade)", 100, 250, 10),
     T(TAB_CONTROLS, "quick_gear_swap", "SELECT+Left/Right: tunic/boots", "SELECT+esq./dir.: túnica/botas"),
 
