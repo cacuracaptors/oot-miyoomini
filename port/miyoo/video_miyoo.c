@@ -97,10 +97,12 @@ static int fb_set_mode(const char *why) {
     n.transp.offset = 24;
     n.transp.length = 8;
     n.activate = FB_ACTIVATE_NOW | FB_ACTIVATE_FORCE;
-    if (v.xres != PANEL_W || v.yres != PANEL_H || v.bits_per_pixel != 32) {
+    if (v.xres != PANEL_W || v.yres != PANEL_H || v.bits_per_pixel != 32 || !strcmp(why, "abertura")) {
         /* a memoria da tela ainda tem a imagem do programa anterior em outro passo de linha (o Game Switcher do
          * Mini v4/Flip: 752 pixels por linha), que o modo novo mostraria torta ate o 1o quadro: preto antes,
-         * como o fbmode --preclear do RedOnion (port do Mario Kart 64) */
+         * como o fbmode --preclear do RedOnion (port do Mario Kart 64). Na abertura, sempre: a pagina 0 pode ter
+         * ainda o ultimo quadro da vez anterior do jogo (o menu do OnionOS desenha na outra pagina), que aparecia
+         * por 1 ou 2 segundos ate o 1o quadro novo. */
         struct fb_fix_screeninfo of;
         if (ioctl(fb_fd, FBIOGET_FSCREENINFO, &of) == 0 && of.smem_len) {
             void* m = mmap(NULL, of.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd, 0);
