@@ -164,7 +164,7 @@ extern int gx_hd_filtro;        /* port/gfx/gfx_fast.inc: filtro nas texturas no
 extern int gx_menu_320, gx_logo_opaca, gx_logo_320, gx_hr_reducao_sempre, gx_hr_direto, gx_hr_zpontos, gx_ge_alfa, gx_hr_le, gx_hr_ctl2, port_texgen_old, gx_pontilhado, gx_arquivos_320, gx_filtro_exato_perto, gx_filtro_perto_fino, gx_ge_pequenas, gx_ge_mudando, gx_bg_ge, gx_tri_lazy; /* port/gfx/gfx_hires.c, gfx_rdp.c */
 extern int gx_menu_opaco;
 extern int gx_brilho;             /* port/gfx/gfx_rdp.c: brilho (gamma) */        /* port/gfx/gfx_rdp.c: menu de pausa sem transparencia */
-extern int gx_ge_texto, gx_texto_320;          /* port/gfx/gfx_ge.c: caixa de texto pelo acelerador */
+extern int gx_ge_texto, gx_texto_320_opt;          /* port/gfx/gfx_ge.c: caixa de texto pelo acelerador */
 extern int gx_fix_vanishing_paths; /* port/gfx/gfx_tri.c */
 extern int gx_hd_perto;         /* port/gfx/gfx_fast.inc: filtro leve nas novas so perto da camera */
 extern int os_rt;               /* platform/os_core.c: threads do jogo, som e tela em tempo real */
@@ -177,7 +177,7 @@ int port_opt_lens_flare = 1;
 int port_opt_light_hit_marks = 1; /* marca de acerto recortada (z_eff_ss_hitmark.c, tools/oot-patch-soh.py) */ /* reflexo do sol na lente (z_kankyo.c, tools/oot-patch.py) */
 int port_opt_menu_theme = 1; /* cores do menu de opcoes (port/miyoo/menu_miyoo.c) */
 extern int port_opt_perf_trace; /* port/perf_trace.c */            /* port/gfx/gfx_hook.c: registro quadro a quadro no log */
-extern int gx_hr_max, gx_hr_alvo, gx_hr_texto; /* port/gfx/gfx_hires.c: resolucao maior (dinamica) */
+extern int gx_hr_max_opt, gx_hr_alvo, gx_hr_texto, gx_retro, gx_retro_forca; /* port/gfx/gfx_hires.c: resolucao maior (dinamica) */
 int port_opt_nucleos_fixos = 1;  /* desenho no nucleo 0, auxiliar do desenho no 1 */
 int port_opt_clock = 1600;          /* MHz da CPU ao abrir o jogo (0 = o que o sistema deixar, 1200) */
 int port_opt_clock_guard = 1; /* 1 = se o clock da CPU cair sozinho durante o jogo, pede de novo (a cada 10 s) */
@@ -470,8 +470,12 @@ static const struct {
     { "Cheats", "cheat_dampe_always_win", "", &port_opt_cheat_dampe_always_win,
       "1 = every dig in Dampe's game gives the grand prize (the heart piece first, then purple rupees)" },
     /* ---------------------------------------------------------------- Graphics */
-    { "Graphics", "max_resolution", "resolucao", &gx_hr_max,
-      "maximum width of the 3D image: 640 (640x480) down to 320 (320x240, like the N64), in steps of 32. Above 320 the resolution is dynamic: it steps down in heavy scenes and back up in light ones" },
+    { "Graphics", "max_resolution", "resolucao", &gx_hr_max_opt,
+      "maximum width of the 3D image: 640 (640x480) down to 320 (320x240, like the N64), in steps of 32. Above 320 the resolution is dynamic: it steps down in heavy scenes and back up in light ones. With retro_filter on it stays at 320" },
+    { "Graphics", "retro_filter", "", &gx_retro,
+      "retro filter (CRT TV look): 1 = scanlines, 2 = scanlines and an RGB mask; 0 = off. The game is drawn at 320x240 like the N64 (max_resolution is not used) and every game line takes 2 screen lines, so the scanlines match the game's lines" },
+    { "Graphics", "retro_filter_strength", "", &gx_retro_forca,
+      "retro filter: how much the scanlines (and the mask) darken, in % (25 to 75; 50 = default)" },
     { "Graphics", "resolution_target_ms", "resolucao_alvo", &gx_hr_alvo,
       "dynamic resolution: drawing time (ms) it tries not to exceed. Lower = steps down sooner (smoother, less sharp); 30 = default" },
     { "Graphics", "brightness", "", &gx_brilho,
@@ -525,7 +529,7 @@ static const struct {
       "1 = the pre-rendered JPEG backgrounds (Market square, Temple of Time front, Castle Town entrance) are scaled onto the image by the 2D accelerator (smoother, almost no work for the CPU cores); 0 = copied by the CPU cores" },
     { "Performance", "hud_fade_on_accelerator", "hud_alfa", &gx_ge_alfa,
       "1 = the HUD (and other 2D on the accelerator) stays on the accelerator while fading in or out (only the transparency changes); 0 = goes back to the CPU cores" },
-    { "Graphics", "text_box_320", "", &gx_texto_320,
+    { "Graphics", "text_box_320", "", &gx_texto_320_opt,
       "1 = dialog boxes (box and text) are built at 320x240 like the rest of the interface (costs CPU every time the text changes); 0 = built at 640x480 (default, cheaper: only the new letters are added)" },
     { "Performance", "text_box_accelerator", "texto_acelerador", &gx_ge_texto,
       "1 = the whole dialog box goes through the 2D accelerator (rebuilt only when the text changes; almost no work for the CPU cores); 0 = by the CPU cores (sharp_text_boxes)" },
@@ -823,6 +827,8 @@ static const struct {
     { "cheat_no_keese_guay_target", 0 },
     { "cheat_dampe_always_win", 0 },
     { "max_resolution", 640 },
+    { "retro_filter", 0 },
+    { "retro_filter_strength", 50 },
     { "resolution_target_ms", 30 },
     { "brightness", 0 },
     { "texture_filter", 1 },
@@ -953,6 +959,10 @@ void port_options_load(const char* path) {
     g_optPath = path;
     read_file(path, 1);
     write_default(path); /* reescreve com os valores lidos: opcoes novas aparecem no arquivo */
+    {
+        extern void gx_hr_sync_opts(void); /* gfx_hires.c: resolucao em uso (filtro retro) */
+        gx_hr_sync_opts();
+    }
     fprintf(stderr, "opcoes:");
     for (i = 0; i < NOPTS; i++) {
         fprintf(stderr, " %s=%d", k_opts[i].name, *k_opts[i].var);

@@ -208,6 +208,8 @@ static const Item k_items[] = {
     T(TAB_GFX, "frame_interpolation", "30 fps (in-between frames)", "30 fps (quadros extras)"),
     T(TAB_GFX, "frame_rate_steps", "Frame rate steps (30..20)", "Degraus de fps (30..20)"),
     R(TAB_GFX, "brightness", "Brightness (gamma)", "Brilho (gamma)", 0, 10, 1),
+    R(TAB_GFX, "retro_filter", "Retro filter", "Filtro retrô", 0, 2, 1),
+    R(TAB_GFX, "retro_filter_strength", "Retro filter strength (%)", "Força do filtro retrô (%)", 25, 75, 5),
     R(TAB_GFX, "max_resolution", "Maximum resolution (width)", "Resolução máxima (largura)", 320, 640, 32),
     R(TAB_GFX, "resolution_target_ms", "Dynamic resolution target (ms)", "Alvo da resolução dinâmica (ms)", 20, 40, 1),
     R(TAB_GFX, "dither", "Dithering", "Pontilhado de cor", 0, 2, 1),
@@ -413,6 +415,16 @@ static int item_ok(const Item* it) {
     return is_action(it) || port_option_ptr(it->name) != NULL;
 }
 
+/* opcao que nao vale agora (aparece cinza e nao muda): a resolucao com o filtro retro ligado (fica em 320x240) e a
+ * forca do filtro com ele desligado */
+static int item_locked(const Item* it) {
+    extern int gx_retro; /* gfx_hires.c */
+    if (is_action(it)) {
+        return 0;
+    }
+    return (!strcmp(it->name, "max_resolution") && gx_retro) || (!strcmp(it->name, "retro_filter_strength") && !gx_retro);
+}
+
 /* todas as opcoes do menu (e as de diagnostico) voltam aos valores de fabrica */
 static void restore_defaults(void) {
     int i, n = 0;
@@ -566,7 +578,7 @@ static void change(const Item* it, int dir) {
         return;
     }
     v = port_option_ptr(it->name);
-    if (v == NULL) {
+    if (v == NULL || item_locked(it)) {
         return;
     }
     if (it->min == 0 && it->max == 1) {
@@ -1293,7 +1305,8 @@ static void draw_scrollbar(int top, int n) {
 
 /* o valor de uma opcao, a direita da linha; devolve onde comeca */
 static int draw_value(const Item* it, int y, int isSel) {
-    const int v = is_action(it) ? 0 : *port_option_ptr(it->name);
+    const int locked = item_locked(it);
+    const int v = is_action(it) ? 0 : (locked && !strcmp(it->name, "max_resolution")) ? 320 : *port_option_ptr(it->name);
     const int cy = y + 13; /* meio da linha */
     const char* nm;
     char buf[64];
@@ -1346,15 +1359,15 @@ static int draw_value(const Item* it, int y, int isSel) {
         fill = fill < 0 ? 0 : (fill > bw ? bw : fill);
         rrect(bx, cy - 3, bw, 6, 3, isSel ? 0xFFFFFFu : TH(track), isSel ? 60 : 255);
         if (fill > 0) {
-            rrect(bx, cy - 3, fill, 6, 3, TH(fill), 255);
+            rrect(bx, cy - 3, fill, 6, 3, locked ? TH(dim) : TH(fill), 255);
         }
-        circle((float)(bx + fill), (float)cy, 7.0f, isSel ? TH(knob) : TH(fill), 255);
+        circle((float)(bx + fill), (float)cy, 7.0f, locked ? TH(dim) : isSel ? TH(knob) : TH(fill), 255);
         if (v == offv) {
             snprintf(buf, sizeof buf, "%s", tr("off", "não"));
         } else {
             snprintf(buf, sizeof buf, "%d", v);
         }
-        big_right(VAL_X1, y, buf, isSel ? TH(selText) : TH(text));
+        big_right(VAL_X1, y, buf, locked ? TH(dim) : isSel ? TH(selText) : TH(text));
         return bx - 8;
     }
 }
@@ -1524,7 +1537,7 @@ void miyoo_menu_render(uint32_t* page) {
             rrect(22, y + 7, 4, ROW_H - 16, 2, TH(accent), 255);
         }
         vx = draw_value(it, y + 1, isSel);
-        big_fit(34, vx - 14, y + 1, item_label(it), isSel ? TH(selText) : TH(text), isSel);
+        big_fit(34, vx - 14, y + 1, item_label(it), item_locked(it) ? TH(dim) : isSel ? TH(selText) : TH(text), isSel);
     }
     draw_scrollbar(*top, n);
 

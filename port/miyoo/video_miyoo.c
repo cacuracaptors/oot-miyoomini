@@ -203,9 +203,10 @@ static void* open_lib(const char* name) {
     return NULL;
 }
 
-static int hw_blit_fmt(MI_PHY src, int sfmt, int sw, int sh, MI_PHY dst, int dw, int dh, int rotate, int mirror) {
+/* dstride: bytes por linha no destino (o filtro retro escreve uma linha sim, outra nao: 2 linhas da tela) */
+static int hw_blit_ex(MI_PHY src, int sfmt, int sw, int sh, MI_PHY dst, int dw, int dh, int dstride, int rotate, int mirror) {
     MI_GFX_Surface_t s = { src, sfmt, (MI_U32)sw, (MI_U32)sh, (MI_U32)sw * 2 };
-    MI_GFX_Surface_t d = { dst, E_MI_GFX_FMT_ARGB8888, (MI_U32)dw, (MI_U32)dh, (MI_U32)dw * 4 };
+    MI_GFX_Surface_t d = { dst, E_MI_GFX_FMT_ARGB8888, (MI_U32)dw, (MI_U32)dh, (MI_U32)dstride };
     MI_GFX_Rect_t sr = { 0, 0, (MI_U32)sw, (MI_U32)sh }, dr = { 0, 0, (MI_U32)dw, (MI_U32)dh };
     MI_GFX_Opt_t opt;
     MI_U16 fence = 0;
@@ -224,6 +225,19 @@ static int hw_blit_fmt(MI_PHY src, int sfmt, int sw, int sh, MI_PHY dst, int dw,
     pthread_mutex_unlock(&g_blitMx);
     mi.Wait(TRUE, fence);
     return 0;
+}
+
+static int hw_blit_fmt(MI_PHY src, int sfmt, int sw, int sh, MI_PHY dst, int dw, int dh, int rotate, int mirror) {
+    extern int gx_retro; /* gfx_hires.c: filtro retro */
+    if (gx_retro && sw == 320 && sh == 240 && dw == PANEL_W && dh == PANEL_H) {
+        /* filtro retro: cada linha do jogo vai inteira para 2 linhas da tela (sem a suavizacao de cima para baixo, que
+         * misturaria as linhas vizinhas): 2 copias de 640x240, uma nas linhas pares e outra nas impares */
+        if (hw_blit_ex(src, sfmt, sw, sh, dst, dw, dh / 2, dw * 8, rotate, mirror) != 0) {
+            return -1;
+        }
+        return hw_blit_ex(src, sfmt, sw, sh, dst + (MI_PHY)dw * 4, dw, dh / 2, dw * 8, rotate, mirror);
+    }
+    return hw_blit_ex(src, sfmt, sw, sh, dst, dw, dh, dw * 4, rotate, mirror);
 }
 
 static int hw_blit(MI_PHY src, int sw, int sh, MI_PHY dst, int dw, int dh, int rotate, int mirror) {
@@ -753,6 +767,163 @@ static void ge_draw(const void* key, int back) {
     }
     g_geShown++;
     g_geItems += (unsigned)done;
+}
+
+/* ---------------------------------------------------------------- filtro retro (opcao retro_filter)
+ * Uma camada de 640x480 com o desenho da TV de tubo (as linhas escuras entre as linhas do jogo e, no modo 2, a mascara
+ * de colunas vermelho/verde/azul), aplicada pelo MI_GFX por cima da imagem pronta (depois do HUD): o chip MULTIPLICA a
+ * cor da tela pela da camada (cada canal), sem trabalho para os nucleos. Um teste confere se ele multiplica; se nao,
+ * a camada so escurece pela transparencia (a mascara vira listras mais escuras, sem cor). A camada e feita na
+ * orientacao de quem olha e vai com o mesmo giro da imagem do jogo. */
+static MI_PHY rt_phys;
+static uint32_t* rt_virt;
+static int rt_mode = -1, rt_forca = -1;
+static int rt_mul = -1; /* -1 = falta o teste; 1 = multiplica; 0 = so a transparencia; -2 = sem memoria */
+static int rt_sop, rt_dop;
+
+static int rt_blit(MI_PHY src, MI_PHY dst, int w, int h, int sop, int dop, int rotate, int mirror, MI_U16* fence) {
+    MI_GFX_Surface_t s = { src, E_MI_GFX_FMT_ARGB8888, (MI_U32)w, (MI_U32)h, (MI_U32)w * 4 };
+    MI_GFX_Surface_t d = { dst, E_MI_GFX_FMT_ARGB8888, (MI_U32)w, (MI_U32)h, (MI_U32)w * 4 };
+    MI_GFX_Rect_t r = { 0, 0, (MI_U32)w, (MI_U32)h };
+    MI_GFX_Opt_t opt;
+    int e;
+    memset(&opt, 0, sizeof opt);
+    opt.stClipRect = r;
+    opt.eSrcDfbBldOp = (MI_GFX_DfbBldOp_e)sop;
+    opt.eDstDfbBldOp = (MI_GFX_DfbBldOp_e)dop;
+    opt.eMirror = (MI_GFX_Mirror_e)mirror;
+    opt.eRotate = (MI_GFX_Rotate_e)rotate;
+    opt.eDFBBlendFlag = E_MI_GFX_DFB_BLEND_ALPHACHANNEL;
+    pthread_mutex_lock(&g_blitMx);
+    e = mi.Blit(&s, &r, &d, &r, &opt, fence) != 0;
+    pthread_mutex_unlock(&g_blitMx);
+    return e;
+}
+
+/* o MI_GFX multiplica as cores? (camada 0x80FF40 sobre cinza 0x808080: tem de dar 0x408020) */
+static int rt_test(void) {
+    static const int ops[2][2] = { { E_MI_GFX_DFB_BLD_DESTCOLOR, E_MI_GFX_DFB_BLD_ZERO },
+                                   { E_MI_GFX_DFB_BLD_ZERO, E_MI_GFX_DFB_BLD_SRCCOLOR } };
+    MI_PHY ps = 0, pd = 0;
+    void *vs = NULL, *vd = NULL;
+    int ok = 0, k, i;
+    if (mi.MmaAlloc(NULL, 4096, &ps) || mi.MmaAlloc(NULL, 4096, &pd) || mi.Mmap(ps, 4096, &vs, TRUE) ||
+        mi.Mmap(pd, 4096, &vd, TRUE)) {
+        goto out;
+    }
+    for (k = 0; k < 2 && !ok; k++) {
+        uint32_t* sp = vs;
+        uint32_t* dp = vd;
+        MI_U16 fence = 0;
+        for (i = 0; i < 16; i++) {
+            sp[i] = 0xFF80FF40u;
+            dp[i] = 0xFF808080u;
+        }
+        mi.Flush(vs, 4096);
+        mi.Flush(vd, 4096);
+        if (rt_blit(ps, pd, 16, 1, ops[k][0], ops[k][1], E_MI_GFX_ROTATE_0, E_MI_GFX_MIRROR_NONE, &fence) != 0) {
+            continue;
+        }
+        mi.Wait(TRUE, fence);
+        mi.Flush(vd, 4096);
+        ok = ge_near(dp[5], 0x408020u) && ge_near(dp[10], 0x408020u);
+        fprintf(stderr, "video: filtro retro, teste da multiplicacao %d: %08X (%s)\n", k, (unsigned)dp[5], ok ? "ok" : "nao");
+        if (ok) {
+            rt_sop = ops[k][0];
+            rt_dop = ops[k][1];
+        }
+    }
+out:
+    if (vs) {
+        mi.Munmap(vs, 4096);
+    }
+    if (vd) {
+        mi.Munmap(vd, 4096);
+    }
+    if (ps) {
+        mi.MmaFree(ps);
+    }
+    if (pd) {
+        mi.MmaFree(pd);
+    }
+    return ok;
+}
+
+/* monta a camada (orientacao de quem olha: a linha 2j e a do jogo, a 2j+1 a escura) */
+static int rt_build(int mode, int forca) {
+    const size_t n = (size_t)PANEL_W * PANEL_H;
+    int x, y;
+    unsigned line, mk;
+    if (rt_virt == NULL) {
+        void* v = NULL;
+        if (mi.MmaAlloc(NULL, (MI_U32)(n * 4), &rt_phys) != 0) {
+            rt_phys = 0;
+            return 0;
+        }
+        if (mi.Mmap(rt_phys, (MI_U32)(n * 4), &v, TRUE) != 0) {
+            mi.MmaFree(rt_phys);
+            rt_phys = 0;
+            return 0;
+        }
+        rt_virt = (uint32_t*)v;
+    }
+    forca = forca < 10 ? 10 : forca > 90 ? 90 : forca;
+    line = 255u - 255u * (unsigned)forca / 100u;      /* linha escura */
+    mk = 255u - 255u * (unsigned)forca / 200u;        /* mascara: os 2 canais que nao sao o da coluna */
+    for (y = 0; y < PANEL_H; y++) {
+        uint32_t* row = rt_virt + (size_t)y * PANEL_W;
+        const unsigned l = (y & 1) ? line : 255u;
+        for (x = 0; x < PANEL_W; x++) {
+            unsigned c[3] = { l, l, l };
+            uint32_t px;
+            if (mode == 2) {
+                int k;
+                for (k = 0; k < 3; k++) {
+                    if (k != x % 3) {
+                        c[k] = c[k] * mk / 255u;
+                    }
+                }
+            }
+            if (rt_mul == 1) {
+                px = 0xFF000000u | (c[0] << 16) | (c[1] << 8) | c[2];
+            } else {
+                /* so a transparencia: preto (ja multiplicado pelo alfa) que tira a parte que falta do brilho */
+                const unsigned lum = (c[0] + c[1] + c[2]) / 3u;
+                px = (uint32_t)(255u - lum) << 24;
+            }
+            row[x] = px;
+        }
+    }
+    mi.Flush(rt_virt, (MI_U32)(n * 4));
+    fprintf(stderr, "video: filtro retro %s, forca %d%% (%s)\n", mode == 2 ? "linhas e mascara" : "linhas", forca,
+            rt_mul == 1 ? "multiplicando as cores" : "so escurecendo");
+    return 1;
+}
+
+static void rt_draw(int back) {
+    extern int gx_retro, gx_retro_forca; /* gfx_hires.c */
+    const int mode = gx_retro;
+    MI_U16 fence = 0;
+    if (mode <= 0 || !hw_ok || rt_mul == -2) {
+        return;
+    }
+    if (rt_mul == -1) {
+        rt_mul = rt_test();
+    }
+    if (mode != rt_mode || gx_retro_forca != rt_forca) {
+        if (!rt_build(mode, gx_retro_forca)) {
+            fprintf(stderr, "video: filtro retro sem memoria\n");
+            rt_mul = -2;
+            return;
+        }
+        rt_mode = mode;
+        rt_forca = gx_retro_forca;
+    }
+    if (rt_blit(rt_phys, (MI_PHY)fb_phys + (MI_PHY)back * PANEL_W * PANEL_H * 4, PANEL_W, PANEL_H,
+                rt_mul == 1 ? rt_sop : E_MI_GFX_DFB_BLD_ONE, rt_mul == 1 ? rt_dop : E_MI_GFX_DFB_BLD_INVSRCALPHA,
+                hw_rotate, hw_mirror, &fence) == 0) {
+        mi.Wait(TRUE, fence);
+    }
 }
 #endif
 
@@ -1402,6 +1573,7 @@ static void* flip_proc(void* arg) {
                             pt_ev(PT_FLIP_GE, 0);
                             ge_draw(gekey, back); /* o HUD / logo pelo acelerador, por cima */
                             pt_ev(PT_FLIP_GE + 1, 0);
+                            rt_draw(back); /* filtro retro (opcao retro_filter), por cima de tudo do jogo */
                         }
                     } else {
                         fprintf(stderr, "video: MI_GFX falhou, voltando para a copia pela CPU\n");
@@ -1696,6 +1868,15 @@ static void release_mma(void) {
         }
     }
     ge_ok = 0;
+    if (rt_virt != NULL) {
+        mi.Munmap(rt_virt, (MI_U32)(PANEL_W * PANEL_H * 4));
+        mi.MmaFree(rt_phys);
+        rt_virt = NULL;
+        rt_phys = 0;
+        rt_mode = -1;
+        kb += (PANEL_W * PANEL_H * 4) >> 10;
+        n++;
+    }
     if (g_bgVirt != NULL) {
         mi.Munmap(g_bgVirt, (MI_U32)g_bgCap);
         mi.MmaFree(g_bgPhys);

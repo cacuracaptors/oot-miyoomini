@@ -24,7 +24,13 @@
 #include <arm_neon.h>
 #endif
 
-int gx_hr_max = 640;       /* opcao resolucao: largura maxima (320 = como o jogo, desligado) */
+int gx_hr_max = 640;       /* largura maxima em uso (gx_hr_sync_opts: a opcao, ou 320 com o filtro retro) */
+int gx_hr_max_opt = 640;   /* opcao resolucao: largura maxima (320 = como o jogo, desligado) */
+/* opcao retro_filter: filtro de TV de tubo (video_miyoo.c): 0 = nao, 1 = linhas, 2 = linhas e mascara de cor. Com ele, o
+ * jogo fica em 320x240 (como o N64) e cada linha do jogo ocupa 2 linhas da tela: as linhas escuras do filtro casam com
+ * as do jogo. retro_filter_strength: quanto as linhas escurecem (%) */
+int gx_retro = 0;
+int gx_retro_forca = 50;
 int gx_hr_alvo = 30;       /* opcao resolucao_alvo: ms por desenho que a resolucao dinamica tenta nao passar */
 int gx_hr_fixo;            /* 1 = sempre o tamanho maximo (teste no PC) */
 int gx_hr_ctl2 = 2;        /* opcao controle_resolucao: 1 = como antes; 2 = previsao por pixel (gx_hr_pass_end) */
@@ -766,8 +772,16 @@ void gx_hr_menu_mark(int open) {
     }
 }
 
+/* a resolucao e a caixa de texto em uso, a partir das opcoes (o filtro retro prende as duas em 320x240) */
+void gx_hr_sync_opts(void) {
+    extern int gx_texto_320, gx_texto_320_opt; /* gfx_ge.c */
+    gx_hr_max = gx_retro ? FB_W : gx_hr_max_opt;
+    gx_texto_320 = gx_retro ? 1 : gx_texto_320_opt;
+}
+
 void gx_hr_pass_begin(void) {
     int lvMax = 0, w;
+    gx_hr_sync_opts();
     gx_solid_alpha = 0;
     g_prvLive = 0; /* (Link do menu em 2x: so no desenho com a marca 0x39) */
     gx_ge_pass_begin(); /* (2D pelo acelerador: gfx_ge.c) */

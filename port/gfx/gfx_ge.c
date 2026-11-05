@@ -28,7 +28,8 @@ int gx_ge_on = 1; /* opcao hud_acelerador */
 int gx_ge_texto = 1; /* opcao texto_acelerador: a caixa de texto inteira como uma camada do acelerador */
 /* opcao text_box_320: a camada da caixa de texto (caixa e letras) e montada em 320x240, como o resto da interface,
  * e o acelerador a amplia 2x com suavizacao na tela; 0 = montada em 640x480 (letras mais nitidas) */
-int gx_texto_320 = 0;
+int gx_texto_320 = 0;     /* em uso (gx_hr_sync_opts: a opcao, ou 1 com o filtro retro) */
+int gx_texto_320_opt = 0; /* a opcao */
 static int g_tlS = 1; /* escala da camada guardada: 1 = 640x480, 2 = 320x240 */
 static size_t g_tlCap; /* pixels alocados em g_tl */
 /* opcao logo_320: a logo da abertura e os textos dela (marca do escudo, 0x5458543C) ficam no acelerador 2D (texels da

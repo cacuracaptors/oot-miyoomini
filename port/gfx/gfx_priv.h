@@ -350,7 +350,8 @@ void gx_texrect(uint32_t w0, uint32_t w1, uint32_t h1, uint32_t h2, int flip);
 void gx_bg_rect(uint32_t w1, int copy);
 void gx_fillrect(uint32_t w0, uint32_t w1);
 /* gfx_hires.c: resolucao maior */
-extern int gx_hr_max;  /* largura maxima (opcao resolucao): 320 = desligado */
+extern int gx_hr_max;  /* largura maxima em uso (gx_hr_sync_opts): 320 = desligado */
+extern int gx_hr_max_opt; /* a opcao resolucao */
 void gx_hr_retarget(void);                        /* depois de SETCIMG/SETZIMG */
 void gx_hr_scissor(void);                         /* tesoura efetiva a partir de scRaw */
 void gx_hr_viewport(void);                        /* viewport efetivo a partir de vpRaw */

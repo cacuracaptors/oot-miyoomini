@@ -316,7 +316,7 @@ int main(int argc, char **argv) {
             extern int gx_hd_perto;
             gx_hd_perto = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "--resolucao") && i + 1 < argc) {
-            gx_hr_max = atoi(argv[++i]);
+            gx_hr_max = gx_hr_max_opt = atoi(argv[++i]);
             gx_hr_fixo = 1;
         } else if (!strcmp(argv[i], "--clip-cor-antigo")) {
             extern int gx_clip_cor;
@@ -459,11 +459,11 @@ int main(int argc, char **argv) {
             memcpy((void *)(uintptr_t)pages[i].addr, pages[i].data, 4096);
         }
         gx_cap_load(&st);
-        gx_hr_max = 320;
+        gx_hr_max = gx_hr_max_opt = 320;
         gx_hr_pass_begin();
         gx_render(dl, NULL);
         gx_hr_pass_end(0);
-        gx_hr_max = keep;
+        gx_hr_max = gx_hr_max_opt = keep;
         gx_hr_screen(gx.cimgRaw);
     }
     if (compare) {

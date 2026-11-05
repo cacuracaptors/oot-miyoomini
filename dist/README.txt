@@ -72,6 +72,9 @@ FEATURES
 - A software renderer made for the Miyoo Mini Plus, using both CPU cores;
   the HUD, dialog boxes and title logo drawn sharp at full 640x480
 - A new HD title logo; adjustable brightness (Select+Up/Down)
+- Optional retro filter (CRT look): scanlines, or scanlines with an RGB
+  mask, with adjustable strength; the game is then drawn at the N64's
+  320x240, so every game line matches the filter's lines
 - CPU clock picked by device (1800 MHz on the Mini Plus, 1600 MHz on the
   Mini, Mini v4 and Mini Flip)
 - Manual jump button, smooth D-pad turning, natural and smooth aiming,
