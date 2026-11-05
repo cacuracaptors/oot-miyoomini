@@ -14,7 +14,7 @@ from your European ROM.
 
 ### Graphics and performance
 
-- - Native 640x480 with dynamic resolution: the 3D picture gets sharper or softer by itself to keep the game smooth,
+- Native 640x480 with dynamic resolution: the 3D picture gets sharper or softer by itself to keep the game smooth,
   with a target frame time you can choose. It can go from 640 down to 320 pixels wide (as on the N64), but in
   practice it rarely drops much: most of the time it stays at or near the full 640, and only goes down a little in
   the busiest areas
