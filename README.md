@@ -17,7 +17,7 @@ from your European ROM.
 - Native 640x480 with dynamic resolution: the 3D picture gets sharper or softer by itself to keep the game smooth,
   with a target frame time you can choose. It can go from 640 down to 320 pixels wide (as on the N64), but in
   practice it rarely drops much: on the Mini Plus (1800 MHz) it stays at or near the full 640 most of the time, and
-  only goes down a little in the busiest areas (like Kokiri and Kakariko villages). On the models limited to 1600 MHz (Mini, Mini v4, Mini Flip) it
+  only goes down a little in the busiest areas, like Kokiri and Kakariko villages. On the models limited to 1600 MHz (Mini, Mini v4, Mini Flip) it
   drops a little bit more often
 - 30 FPS: the game's 20 FPS are interpolated to 30 frames per second (in-between frames for everything that
   moves: actors, the camera, effects, scrolling textures, skinned models like Epona), with optional steps between
