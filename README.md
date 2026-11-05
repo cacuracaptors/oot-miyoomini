@@ -161,6 +161,12 @@ While the ocarina is out, the buttons change so that every note is easy to reach
 Link doesn't move while playing, and X, Y and a tap on Select do nothing. Select+D-pad keeps its usual functions
 (brightness, tunic and boots).
 
+## Tips
+
+- If after changing a setting you notice stuttering or uneven frame pacing, lower the dynamic resolution target
+  (Menu+Start > Graphics > Dynamic resolution target, 30 ms by default): the resolution then steps down a bit
+  sooner and the game stays smooth.
+
 ## Known issues
 
 - A few cosmetic texts of the file select options screen stay in English with German/French (their size differs

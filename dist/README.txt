@@ -90,6 +90,13 @@ FEATURES
 - OnionOS integration: save states and the Game Switcher, save on power-off
   with automatic resume, autosave every few minutes and when you quit
 
+TIPS
+----
+If after changing a setting you notice stuttering or uneven frame pacing,
+lower the dynamic resolution target (Menu+Start > Graphics > Dynamic
+resolution target, 30 ms by default): the resolution then steps down a bit
+sooner and the game stays smooth.
+
 FILES
 -----
   options.txt ......... all the options of the port (also in Menu+Start)
