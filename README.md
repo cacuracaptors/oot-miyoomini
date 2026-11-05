@@ -38,6 +38,7 @@ from your European ROM.
 - A manual jump button, with an adjustable jump strength and an optional automatic jump at ledges
 - Smooth D-pad turning (Link turns in smooth curves, like with an analog stick)
 - Natural aiming (up looks up) and smooth aiming, for first person, the slingshot, the bow and the hookshot
+- Mid-air steering: the D-pad nudges Link's direction while jumping or falling (up to 45 degrees, not a full turn)
 - Sprint: keep holding A after a roll
 - Ocarina on the D-pad (C buttons) and the shoulder buttons (Z and R bend the note)
 - Select+Left/Right switches tunics and boots without opening the pause menu

@@ -77,9 +77,9 @@ FEATURES
   320x240, so every game line matches the filter's lines
 - CPU clock picked by device (1800 MHz on the Mini Plus, 1600 MHz on the
   Mini, Mini v4 and Mini Flip)
-- Manual jump button, smooth D-pad turning, natural and smooth aiming,
-  sprint (keep holding A after a roll), ocarina on the D-pad, real
-  vibration, tunic/boots switching without the pause menu
+- Manual jump button, mid-air steering, smooth D-pad turning, natural and
+  smooth aiming, sprint (keep holding A after a roll), ocarina on the
+  D-pad, real vibration, tunic/boots switching without the pause menu
 - English, Japanese, Brazilian Portuguese (the Zelda 64 BR fan translation)
   and, from your European ROM, German and French
 - In-game options menu (Menu+Start) in all five languages, with 10 save

@@ -91,6 +91,7 @@ int port_opt_ask_to_equip = 0;
 int port_opt_minimal_ui = 0;
 int port_tt_novoid; /* (codigo do jogo: viagem no tempo sem o dano da queda) */
 
+int port_opt_air_steering = 1; /* z_player.c: direcao no ar (Port_AirSteer) */
 int port_opt_better_roll = 0; /* z_player.c: rolada encadeada e com direcao */
 int port_opt_fast_farores = 0;
 int port_opt_skip_arrow_animation = 0;
@@ -235,6 +236,8 @@ static const struct {
       "with manual_jump: 1 = Link also jumps by himself when he runs off a ledge (like the original); 0 = no automatic jump: he falls off the ledge, and only the jump button jumps" },
     { "Controls", "jump_strength", "", &port_opt_jump_strength,
       "manual jump: minimum jump strength x10 (56 = 5.6; higher = taller jump). The running jump uses the game's own value when it is stronger" },
+    { "Controls", "air_steering", "", &port_opt_air_steering,
+      "1 = in the air (jumping or falling) the D-pad steers Link a little, up to 45 degrees to each side of the direction he left the ground in (a nudge, not a turn); 0 = like the original" },
     { "Controls", "sprint_speed", "", &port_opt_sprint_speed,
       "sprint: A makes Link roll; keep holding A after the roll and he runs faster, N% of the normal speed (150 = 1.5x); release A or stop to walk normally. 100 = off" },
     { "Controls", "quick_gear_swap", "atalho_roupa", &port_opt_atalho_roupa,
@@ -702,6 +705,7 @@ static const struct {
     { "jump_on_b", 1 },
     { "auto_jump", 1 },
     { "jump_strength", 70 },
+    { "air_steering", 1 },
     { "sprint_speed", 150 },
     { "quick_gear_swap", 0 },
     { "text_speed", 3 },
