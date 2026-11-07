@@ -368,6 +368,9 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "--sem-fundo-misto")) {
             extern int gx_bgmix;
             gx_bgmix = 0;
+        } else if (!strcmp(argv[i], "--mistura-desliza") && i + 1 < argc) {
+            extern int gx_mistura_desliza;
+            gx_mistura_desliza = atoi(argv[++i]); /* 0, 1 (ate 64x64) ou 2 (ate 128x128) */
         } else if (!strcmp(argv[i], "--sem-mistura-desliza")) {
             extern int gx_mistura_desliza;
             gx_mistura_desliza = 0; /* texturas que deslizam misturadas por pixel (como antes do lote 183) */
@@ -585,6 +588,15 @@ int main(int argc, char **argv) {
     printf("%s: dl=%08x paginas=%u | cmds=%u tris=%u desenhados=%u rects=%u cargas_tex=%u ruins=%u\n", in, dl, npages,
            gx.nCmd, gx.nTri, gx.nTriDrawn, gx.nRect, gx.nTexLoad, gx.nBad);
     printf("tempo: melhor %.2f ms, media %.2f ms (%d vezes)\n", best, total / repeat, repeat);
+    {
+        extern void gx_premix_stats(double *ms, unsigned *n);
+        double pms;
+        unsigned pn;
+        gx_premix_stats(&pms, &pn);
+        if (pn) {
+            printf("misturas deslocadas refeitas: %u (%.3f ms cada)\n", pn, pms / pn);
+        }
+    }
     {
         /* divisao do trabalho entre as threads (media por quadro) */
         extern uint64_t gx_raster_ns, gx_helper_ns, gx_wait_ns;

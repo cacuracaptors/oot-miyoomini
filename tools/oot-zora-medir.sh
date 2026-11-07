@@ -19,19 +19,16 @@ cd /mnt/SDCARD/oot_zora || exit 1
 chmod +x ./rp
 echo performance > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
 CEU=800ac100,800b0100,800b0100
-for n in 00 03 07; do
+for n in 00 07; do
   C=lento_$n.cap
   [ -f $C ] || continue
   echo "== $C"
-  printf "%-20s " "agua_sem_premistura"
-  ./rp $C --fast --threads 2 --pin --rt 1 --resolucao 384 --filtro-rapido --sem-mistura-desliza --repeat 60 2>&1 | grep "^tempo"
-  for v in "inteiro:" "sem_ceu:$CEU" "sem_fundo_do_lago:02010eb8" "sem_agua:060025a0" "sem_lago_e_agua:02010eb8,060025a0"; do
-    nome=${v%%:*}; sk=${v#*:}
-    printf "%-20s " $nome
-    TSKIP=$sk ./rp $C --fast --threads 2 --pin --rt 1 --resolucao 384 --filtro-rapido --repeat 60 2>&1 | grep "^tempo"
+  for m in 0 1 2; do
+    # PMFORCE: refaz a mistura em toda repeticao, como no jogo com a agua deslizando
+    printf "premix_scrolling=%s  " $m
+    PMFORCE=1 ./rp $C --fast --threads 2 --pin --rt 1 --resolucao 384 --filtro-rapido --mistura-desliza $m --repeat 60 2>&1 | grep "^tempo\|^misturas" | tr '\n' ' '
+    echo
   done
-  printf "%-20s " "sem_fundo_adiado"
-  ./rp $C --fast --threads 2 --pin --rt 1 --resolucao 384 --filtro-rapido --sem-fundo --repeat 60 2>&1 | grep "^tempo"
 done
 echo fim
 Y

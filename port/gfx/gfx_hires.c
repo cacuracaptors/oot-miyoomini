@@ -1034,6 +1034,10 @@ void gx_hr_print_stats(void) {
     g_redNs = gx_hr_copyNs = 0;
     g_redN = g_redLazy = gx_hr_copyN = 0;
     gx_ge_print_stats();
+    {
+        extern void gx_premix_print(void);
+        gx_premix_print();
+    }
     if (g_tStat[0] + g_tStat[1] + g_tStat[2] + g_tStat[3]) {
         fprintf(stderr, "[resolucao] caixas de texto: em 640 sobre imagem maior %u, sobre 320 %u, imagem ja em 640 %u, recusadas %u\n",
                 g_tStat[0], g_tStat[1], g_tStat[2], g_tStat[3]);
