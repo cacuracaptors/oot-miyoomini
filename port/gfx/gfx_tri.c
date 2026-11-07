@@ -1343,6 +1343,25 @@ void gx_draw_tri(const GxVtx *a, const GxVtx *b, const GxVtx *c) {
     if (gx.cimg.addr == NULL) {
         return;
     }
+#ifdef GX_REPLAY_DIAG
+    {
+        /* (so no reprodutor de diagnostico) TSKIP=end,end: pula os triangulos dessas texturas */
+        static int ini, nsk;
+        static uint32_t sk[8];
+        int k;
+        if (!ini) {
+            const char *e = getenv("TSKIP");
+            ini = 1;
+            while (e != NULL && *e && nsk < 8) {
+                sk[nsk++] = (uint32_t)strtoul(e, (char **)&e, 16);
+                if (*e == ',') e++;
+            }
+        }
+        for (k = 0; k < nsk; k++) {
+            if (gx.timgRaw == sk[k]) return;
+        }
+    }
+#endif
     tri_raw(&R, a, b, c);
     if (fast_ok()) {
         if (fast_tri_lazy(&R)) {

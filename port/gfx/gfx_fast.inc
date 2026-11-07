@@ -3644,6 +3644,12 @@ static void bg_end(void) {
     if (g_bgState == 0) {
         return;
     }
+#ifdef GX_REPLAY_DIAG
+    if (getenv("BGDBG")) {
+        fprintf(stderr, "[fundo] fecha: estado %d, trabalhos adiados %d..%d, linhas %d..%d | quem fechou: tex %08x omL %08x comb %08x %08x\n",
+                g_bgState, g_bgFirst, g_bgLast, g_bgY0, g_bgY1, gx.timgRaw, gx.omL, gx.combW0, gx.combW1);
+    }
+#endif
     g_bgState = 0;
     g_ord[g_nJobs] = (uint16_t)g_nJobs;
     j = &g_jobs[g_nJobs++]; /* batch_reserve deixou lugar */
@@ -3663,6 +3669,15 @@ static int bg_pre(const FastProg *f, int useZ, int ys, int ye) {
     if (f->dead) {
         return 0; /* nao escreve nada */
     }
+#ifdef GX_REPLAY_DIAG
+    if (getenv("BGDBG")) {
+        static int nn;
+        if (nn++ < 4) {
+            fprintf(stderr, "[fundo] trabalho %d: fused %d needMem %d useZ %d tex %08x omL %08x\n", g_nJobs, f->fused,
+                    f->needMem, useZ && f->zimg != NULL, gx.timgRaw, gx.omL);
+        }
+    }
+#endif
     compat = gx_bgdefer && f->fused && !f->needMem && f->cimg == g_bgCimg && f->cwidth <= COV_W - 16 && ye < COV_H;
     /* camadas do fundo que misturam com o que ja esta na tela (nuvens por cima do ceu) tambem ficam
      * guardadas, desde que venham logo depois do primeiro trabalho do fundo: no fim da janela elas sao
@@ -3694,6 +3709,11 @@ static int bg_pre(const FastProg *f, int useZ, int ys, int ye) {
         bg_end();
     }
     if (cand) {
+#ifdef GX_REPLAY_DIAG
+        if (getenv("BGDBG")) {
+            fprintf(stderr, "[fundo] abre no trabalho %d: tex %08x omL %08x\n", g_nJobs, gx.timgRaw, gx.omL);
+        }
+#endif
         g_bgState = 1;
         g_bgFirst = g_bgLast = g_nJobs;
         g_bgCimg = f->cimg;
