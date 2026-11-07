@@ -747,6 +747,10 @@ static void ge_draw(const void* key, int back) {
     if (n <= 0) {
         return;
     }
+    {
+        extern pthread_mutex_t gx_ge_wmx; /* (TESTE do lote 176) */
+        pthread_mutex_lock(&gx_ge_wmx);
+    }
     mem = gx_ge_part_mem(part, &lo, &hi);
     if (hi > lo && mem != NULL) {
         mi.Flush((void*)(mem + lo), hi - lo); /* (os texels novos estao no cache do processador) */
@@ -764,6 +768,10 @@ static void ge_draw(const void* key, int back) {
     }
     if (done) {
         mi.Wait(TRUE, fence);
+    }
+    {
+        extern pthread_mutex_t gx_ge_wmx;
+        pthread_mutex_unlock(&gx_ge_wmx);
     }
     g_geShown++;
     g_geItems += (unsigned)done;

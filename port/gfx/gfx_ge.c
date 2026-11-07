@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <pthread.h>
 
 #include "gfx_priv.h"
 
@@ -721,9 +722,7 @@ static int scan_ok(const GePrep *r, int x0, int y0, int x1, int y1) {
         ok = 2;
     }
     if (ok == 1 && dynamic_piece(x0, y0, x1, y1, r->key) &&
-        !(gx_ge_mudando && r->sa == 255 && r->sw * r->sh <= (logo_on() ? GE_DYN_LOGO : GE_DYN_MAX))) {
-        /* (TESTE do lote 175: peca que muda e e meio transparente pelo alfa primitivo (os botoes C apagados na agua,
-         * refeitos a cada 14 desenhos) fica com os nucleos) */
+        !(gx_ge_mudando && r->sw * r->sh <= (logo_on() ? GE_DYN_LOGO : GE_DYN_MAX))) {
         ok = 3; /* muda a cada desenho: os nucleos */
     }
     g_need = bake_has(r->key) ? 0u : (uint32_t)(r->sw * r->sh);
@@ -754,7 +753,17 @@ static void dirty(GePart *p, uint32_t lo, uint32_t hi) {
 /* desenho de verdade: os texels da peca (calculados ou da memoria) para a parte atual, e a peca na lista.
  * Faixas seguidas de uma mesma imagem (o logo vem em faixas de poucas linhas, por causa da TMEM) viram uma
  * peca so: menos chamadas do acelerador, e a suavizacao na emenda le a linha vizinha de verdade */
+/* (TESTE do lote 176) o processador nao escreve na memoria das pecas enquanto o MI_GFX copia pecas para a tela */
+pthread_mutex_t gx_ge_wmx = PTHREAD_MUTEX_INITIALIZER;
+static int add_item_(const GePrep *r, float s0, float t0, int x0, int y0, int x1, int y1);
 static int add_item(const GePrep *r, float s0, float t0, int x0, int y0, int x1, int y1) {
+    int k;
+    pthread_mutex_lock(&gx_ge_wmx);
+    k = add_item_(r, s0, t0, x0, y0, x1, y1);
+    pthread_mutex_unlock(&gx_ge_wmx);
+    return k;
+}
+static int add_item_(const GePrep *r, float s0, float t0, int x0, int y0, int x1, int y1) {
     GePart *p = &g_part[g_cur];
     GxGeItem *it;
     GeBake *b;
@@ -1449,7 +1458,15 @@ static GeBake *bake_tri(const GePrep *r, const GeTri *g) {
     return b;
 }
 
+static int add_tri_(const GePrep *r, const GeTri *g);
 static int add_tri(const GePrep *r, const GeTri *g) {
+    int k;
+    pthread_mutex_lock(&gx_ge_wmx);
+    k = add_tri_(r, g);
+    pthread_mutex_unlock(&gx_ge_wmx);
+    return k;
+}
+static int add_tri_(const GePrep *r, const GeTri *g) {
     GeBake *b = bake_tri(r, g);
     GePart *p = &g_part[g_cur];
     GxGeItem *it;
