@@ -24,6 +24,7 @@
  *   MENU+R2 / MENU+L2: salva / carrega o estado rapido (saves/state_quick.oss).
  *   SELECT+A segurados: pulo da lua (so com o cheat cheat_moon_jump_on_l).
  *   SELECT+Y: grava o proximo quadro (captura_NN.cap e .png) para depurar defeitos de imagem.
+ *   R2 segurado (opcao slow_walk): andar devagar; um toque no R2 continua sendo o C-direita.
  *   SELECT+R1: grava a medicao detalhada dos nucleos (perf_NN.bin; so com a opcao perf_trace).
  */
 #include <fcntl.h>
@@ -42,6 +43,8 @@ extern int port_opt_cheat_moon_jump_on_l, port_input_select_a; /* port_options.c
 extern int gx_brilho;            /* gfx/gfx_rdp.c */
 extern int port_opt_segurar_b, port_text_open, port_text_choice; /* port_options.c */
 void port_options_save(void);     /* port_options.c */
+extern int port_opt_slow_walk; /* port_options.c: R2 segurado = andar devagar */
+static int port_input_slow;    /* R2 segurado agora (slow_walk) */
 extern int port_opt_manual_jump, port_opt_jump_on_b, port_input_jump, port_input_frames, port_jump_stamp, port_jump_mode;
 
 enum { K_UP, K_DOWN, K_LEFT, K_RIGHT, K_A, K_B, K_X, K_Y, K_L1, K_R1, K_L2, K_R2, K_START, K_SELECT, K_MENU, K_COUNT };
@@ -312,7 +315,36 @@ static void read_pads(OSContPad pads[4]) {
     if (held[cleftKey] && !(cleftKey == K_Y && held[K_SELECT])) b |= PORT_BTN_CLEFT;
     if (held[cdownKey]) b |= PORT_BTN_CDOWN;
     if (!jumpOn && held[K_L2]) b |= PORT_BTN_CUP;
-    if (held[K_R2]) b |= PORT_BTN_CRIGHT;
+    {
+        /* R2 (C-direita) com a opcao slow_walk: um toque continua sendo o C-direita (o item do botao: estilingue...),
+         * enviado ao soltar por 120 ms; segurado mais de 200 ms, nao vira botao nenhum e o Link anda devagar (o
+         * direcional passa a forca de um analogico pouco inclinado, logo abaixo). MENU+R2 (estado rapido) nao conta. */
+        static long long r2_t0, cr_until;
+        static int r2_was, r2_menu;
+        struct timespec ts;
+        long long now;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        now = (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+        port_input_slow = 0;
+        if (!port_opt_slow_walk) {
+            if (held[K_R2]) b |= PORT_BTN_CRIGHT;
+        } else {
+            if (held[K_R2] && !r2_was) {
+                r2_t0 = now;
+                r2_menu = menu_down;
+            }
+            if (held[K_R2]) {
+                r2_menu |= menu_down;
+                if (now - r2_t0 >= 200) {
+                    port_input_slow = 1;
+                }
+            } else if (r2_was && !r2_menu && now - r2_t0 < 200) {
+                cr_until = now + 120; /* toque: o C-direita de sempre */
+            }
+            r2_was = held[K_R2];
+            if (now < cr_until) b |= PORT_BTN_CRIGHT;
+        }
+    }
     if (held[K_L1]) b |= PORT_BTN_Z;
     if (held[K_R1]) b |= PORT_BTN_R;
     if (held[K_START]) b |= PORT_BTN_START;
@@ -475,10 +507,16 @@ static void read_pads(OSContPad pads[4]) {
                 ang += fabsf(d) <= step ? d : (d > 0 ? step : -step);
             }
             moving = 1;
-            pads[0].stick_x = (s8)lrintf(76.0f * cosf(ang));
-            pads[0].stick_y = (s8)lrintf(76.0f * sinf(ang));
+            {
+                const float f = port_input_slow ? 28.0f : 76.0f; /* (R2 segurado: andar devagar) */
+                pads[0].stick_x = (s8)lrintf(f * cosf(ang));
+                pads[0].stick_y = (s8)lrintf(f * sinf(ang));
+            }
         }
         last = now;
+    } else if (port_input_slow && !held[K_SELECT]) { /* R2 segurado: andar devagar (analogico pouco inclinado) */
+        pads[0].stick_x = (s8)(dx * (dy ? 20 : 28));
+        pads[0].stick_y = (s8)(dy * (dx ? 20 : 28));
     } else if (dx && dy) { /* diagonal: mesma forca que uma direcao so */
         pads[0].stick_x = (s8)(dx * 54);
         pads[0].stick_y = (s8)(dy * 54);

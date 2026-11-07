@@ -35,6 +35,7 @@ CONTROLS
   B ........................... jump (and B in menus and dialogs)
   Y ........................... sword (the N64's B)
   L2 / X / R2 ................. C-Left / C-Down / C-Right
+  R2 (hold) ................... walk slowly (a quick tap is still C-Right)
   Select (tap) ................ C-Up (first person, Navi)
   L1 .......................... Z (target)
   R1 .......................... R (shield)

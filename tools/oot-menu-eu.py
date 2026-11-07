@@ -62,6 +62,14 @@ EU = {
     "Mindesthöhe des Sprungs mit der Sprungtaste (70 = Standard; höher = höherer Sprung). Beim Rennen nutzt der Sprung die Kraft des Spiels, wenn sie größer ist.",
     "Force du saut (x10)",
     "Hauteur minimale du saut du bouton de saut (70 = défaut ; plus haut = saut plus haut). En courant, le saut utilise la force du jeu lui-même quand elle est plus grande."),
+"slow_walk": ("R2 halten: langsam gehen",
+    "An: R2 gedrückt halten lässt Link langsam gehen (ein kurzer Druck auf R2 ist weiterhin das C-Rechts-Item, z. B. die Schleuder). Aus: R2 ist nur C-Rechts.",
+    "R2 maintenu : marcher lentement",
+    "Activé : maintenir R2 fait marcher Link lentement (un appui bref sur R2 reste l'objet de C-droite, comme le lance-pierre). Désactivé : R2 est seulement C-droite."),
+"ledge_grab": ("An Kanten festhalten",
+    "An: wie im Original hält sich Link an der Kante fest, wenn er über sie hinausgeht. Aus: er fällt einfach (praktisch mit der Sprungtaste und ohne automatischen Sprung). Ranken, Leitern und das Festhalten im Sprung funktionieren weiter.",
+    "S'accrocher aux bords",
+    "Activé : comme l'original, en marchant au-delà d'un bord, Link s'y accroche et reste suspendu. Désactivé : il tombe simplement (pratique avec le bouton de saut et sans saut automatique). Les lianes, les échelles et s'accrocher en l'air fonctionnent toujours."),
 "air_steering": ("Lenken in der Luft",
     "An: in der Luft (beim Springen oder Fallen) dreht das Steuerkreuz Link ein wenig, bis zu 45 Grad zu jeder Seite der Richtung, in der er abgesprungen ist (nur eine Korrektur, keine Kurve). Aus: wie im Original.",
     "Direction en l'air",
@@ -636,6 +644,10 @@ UI_EU = {
 # acoes do menu
 "Restore defaults (all tabs)": ("Standard wiederherstellen (alle Reiter)", "Valeurs par défaut (tous les onglets)"),
 "Quit the game": ("Spiel beenden", "Quitter le jeu"),
+"Restart the game": ("Spiel neu starten", "Redémarrer le jeu"),
+"Saves the game (autosave) and starts it again from the beginning, with the intro, like the N64 reset button. Press A twice.":
+    ("Speichert das Spiel (Autospeichern) und startet es von vorn, mit dem Intro, wie die Reset-Taste des N64. Zweimal A drücken.",
+     "Sauvegarde la partie (sauvegarde auto) et la recommence depuis le début, avec l'intro, comme le bouton reset de la N64. Appuyez deux fois sur A."),
 "Every option in this menu goes back to the port's factory values (and the diagnostics are turned off). Press A twice.":
     ("Alle Optionen dieses Menüs gehen auf die Werkseinstellungen des Ports zurück (und die Diagnose wird ausgeschaltet). Zweimal A drücken.",
      "Toutes les options de ce menu reviennent aux valeurs d'usine du port (et les diagnostics sont désactivés). Appuyez deux fois sur A."),

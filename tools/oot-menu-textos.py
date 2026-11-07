@@ -60,6 +60,12 @@ T = {
 "jump_strength": ("ジャンプの強さ（×10）",
     "Altura mínima do pulo do botão de pulo (70 = padrão; maior = pulo mais alto). Correndo, o pulo usa a força do próprio jogo quando ela for maior.",
     "ジャンプの最低の強さ×10（56＝5.6、大きいほど高く跳ぶ）。走りながらのジャンプは、ゲーム本来の値が強ければそちらを使う。"),
+"slow_walk": ("R2長押し：ゆっくり歩く",
+    "Ligado: segurar o R2 faz o Link andar devagar (um toque rápido no R2 continua sendo o item do C-direita, como o estilingue). Desligado: o R2 é só o C-direita.",
+    "1＝R2を押し続けるとリンクがゆっくり歩く（R2を軽く押すとこれまで通りC右のアイテム、パチンコなど）。0＝R2はC右だけ。"),
+"ledge_grab": ("段差から歩いて落ちるとつかまる",
+    "Ligado: como no original, ao sair andando de uma beirada o Link se agarra na borda e fica pendurado. Desligado: ele só cai (bom com o botão de pulo e o pulo automático desligado). Trepadeiras, escadas e agarrar uma borda no ar continuam funcionando.",
+    "1＝オリジナル通り：段差から歩いて出るとふちにつかまってぶら下がる。0＝そのまま落ちる（ジャンプボタン使用・自動ジャンプなしの時に便利）。ツタやはしご、空中でふちにつかまるのはそのまま。"),
 "air_steering": ("空中で向きを調整",
     "Ligado: no ar (pulando ou caindo), o direcional vira o Link um pouco, até 45 graus para cada lado da direção em que ele saiu do chão (só um ajuste, não uma curva). Desligado: como o original.",
     "1＝空中（ジャンプ中・落下中）で十字キーでリンクの向きを少し変えられる。地面を離れた方向から左右45度まで（ちょっとした調整で、空中で曲がることはできない）。0＝オリジナル通り。"),
@@ -532,6 +538,9 @@ UI = {
 "Saving only during gameplay": "セーブはゲーム中のみ", "Save failed": "セーブに失敗しました",
 "State %d loaded": "ステート%dをロードしました", "Saved to state %d": "ステート%dにセーブしました",
 "Restarting...": "再起動中…",
+"Restart the game": "ゲームをリセット",
+"Saves the game (autosave) and starts it again from the beginning, with the intro, like the N64 reset button. Press A twice.":
+    "オートセーブしてから、N64のリセットボタンのようにオープニングから始め直します。Aを2回押してください。",
 "Save": "セーブ", "Load": "ロード", "Quit the game": "ゲームを終了", "Quitting...": "終了中…",
 "Saves the game (autosave) and quits, without the Game Switcher. Press A twice.":
     "オートセーブしてゲームを終了します（ゲームスイッチャーなし）。Aを2回押してください。",

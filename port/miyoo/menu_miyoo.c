@@ -37,6 +37,7 @@ void port_options_save(void);
 void port_ss_slot_request(int save, int slot); /* port/savestate.c */
 void port_ss_restart_request(void);
 void port_ss_quit_request(void);
+void port_ss_reset_request(void);
 int port_ss_slot_info(int slot, long* when);
 int port_ss_slot_thumb(int slot, uint16_t* out);
 extern int port_opt_idioma;
@@ -69,6 +70,7 @@ static const Item k_items[] = {
     T(TAB_GENERAL, "hold_b_fast_text", "Hold B to fast-forward text", "Segurar B acelera o texto"),
     T(TAB_GENERAL, "skip_cutscenes", "START skips cutscenes", "START pula cenas"),
     { TAB_GENERAL, "@restore", "Restore defaults (all tabs)", "Restaurar padrão (todas as abas)", -1, -1, 0, 0 },
+    { TAB_GENERAL, "@reset", "Restart the game", "Reiniciar o jogo", -1, -1, 0, 0 },
     { TAB_GENERAL, "@quit", "Quit the game", "Sair do jogo", -1, -1, 0, 0 },
 
     T(TAB_CONTROLS, "rumble", "Vibration (Rumble Pak)", "Vibração (Rumble Pak)"),
@@ -79,6 +81,8 @@ static const Item k_items[] = {
     T(TAB_CONTROLS, "auto_jump", "Automatic jump", "Pulo automático"),
     R(TAB_CONTROLS, "jump_strength", "Jump strength (x10)", "Força do pulo (x10)", 40, 120, 2),
     T(TAB_CONTROLS, "air_steering", "Mid-air steering", "Direção no ar"),
+    T(TAB_CONTROLS, "slow_walk", "R2 held: walk slowly", "R2 segurado: andar devagar"),
+    T(TAB_CONTROLS, "ledge_grab", "Grab ledges when walking off", "Agarrar a borda ao sair dela"),
     R(TAB_CONTROLS, "sprint_speed", "Sprint speed (%)", "Corrida (% da velocidade)", 100, 250, 10),
     T(TAB_CONTROLS, "quick_gear_swap", "SELECT+Left/Right: tunic/boots", "SELECT+esq./dir.: túnica/botas"),
 
@@ -370,7 +374,9 @@ static int sjis_lead(unsigned char c) {
 #define NSLOTS 10
 static int g_slotState[NSLOTS]; /* 0 vazio, 1 ok, -1 de outra versao */
 static long g_slotWhen[NSLOTS];
-static uint16_t g_thumbs[NSLOTS][160 * 120];
+#define THUMB_W 256 /* (port/savestate.c: miniaturas 256x192) */
+#define THUMB_H 192
+static uint16_t g_thumbs[NSLOTS][THUMB_W * THUMB_H];
 static int g_thumbOk[NSLOTS];
 static volatile int g_slotsDirty = 1;
 static int g_saveArmed = -1; /* estado com o 1o X (gravar por cima pede o 2o) */
@@ -403,7 +409,11 @@ void miyoo_menu_status(const char* text) {
 static volatile int g_open;
 static int g_tab, g_sel[TAB_COUNT], g_top[TAB_COUNT];
 static int g_changed;
-static int g_restoreArmed; /* "Restaurar padrao" / "Sair": o 1o A pede confirmacao, o 2o faz (1 restaurar, 2 sair) */
+static int g_restoreArmed; /* "Restaurar padrao" / "Sair" / "Reiniciar": o 1o A pede confirmacao, o 2o faz (1 restaurar,
+                            * 2 sair, 3 reiniciar) */
+static int action_id(const char* name) {
+    return !strcmp(name, "@quit") ? 2 : !strcmp(name, "@reset") ? 3 : 1;
+}
 static int g_confirm; /* pergunta na tela: uma opcao que so vale reiniciando mudou; reiniciar agora ou cancelar */
 static int g_openVal[256];  /* valores ao abrir o menu (para saber se uma opcao de reiniciar mudou) */
 static double g_restoreAt;
@@ -583,11 +593,16 @@ static void change(const Item* it, int dir) {
     int* v;
     int x;
     if (is_action(it)) {
-        const int which = !strcmp(it->name, "@quit") ? 2 : 1;
+        const int which = action_id(it->name);
         if (g_restoreArmed == which && miyoo_now_ms() - g_restoreAt < 4000.0) {
             g_restoreArmed = 0;
             if (which == 1) {
                 restore_defaults();
+            } else if (which == 3) {
+                /* reiniciar do comeco (abertura), como o reset do N64; salva antes, como o "Sair" */
+                close_menu(0);
+                miyoo_menu_status(tr("Restarting...", "Reiniciando..."));
+                port_ss_reset_request();
             } else {
                 /* sair do jogo (como o MENU fora do OnionOS): o jogo salva sozinho (autosave) e fecha */
                 close_menu(0);
@@ -1339,7 +1354,7 @@ static int draw_value(const Item* it, int y, int isSel) {
     char buf[64];
     int x0;
     if (is_action(it)) {
-        if (g_restoreArmed == (!strcmp(it->name, "@quit") ? 2 : 1) && miyoo_now_ms() - g_restoreAt < 4000.0) {
+        if (g_restoreArmed == action_id(it->name) && miyoo_now_ms() - g_restoreAt < 4000.0) {
             const char* t = tr("A again to confirm", "A de novo: confirma");
             x0 = VAL_X1 - big_width(t);
             big(x0, y, t, TH(warn));
@@ -1496,7 +1511,7 @@ void miyoo_menu_render(uint32_t* page) {
     }
 
     if (IS_STATES(g_tab)) {
-        const int listX1 = 420;
+        const int listX1 = 336;
         if (g_slotsDirty) {
             load_slots();
         }
@@ -1521,18 +1536,18 @@ void miyoo_menu_render(uint32_t* page) {
         }
         draw_scrollbar(*top, NSLOTS);
         {
-            /* miniatura do estado escolhido, com cantos redondos */
-            const int tx0 = 440, ty0 = LIST_Y + 60, s0 = *sel;
+            /* miniatura do estado escolhido (256x192), com cantos redondos, centrada na altura da lista */
+            const int tx0 = listX1 + 14, ty0 = LIST_Y + (LIST_H - THUMB_H) / 2, s0 = *sel, rr = 12;
             int x2, y2;
-            shadow(tx0, ty0, 160, 120, 10);
+            shadow(tx0, ty0, THUMB_W, THUMB_H, rr);
             if (g_thumbOk[s0]) {
-                for (y2 = 0; y2 < 120; y2++) {
-                    for (x2 = 0; x2 < 160; x2++) {
-                        const uint16_t c = g_thumbs[s0][y2 * 160 + x2];
+                for (y2 = 0; y2 < THUMB_H; y2++) {
+                    for (x2 = 0; x2 < THUMB_W; x2++) {
+                        const uint16_t c = g_thumbs[s0][y2 * THUMB_W + x2];
                         const uint32_t r = (c >> 11) & 31, g = (c >> 5) & 63, b = c & 31;
-                        const int cxo = x2 < 10 ? 10 - x2 : (x2 >= 150 ? x2 - 149 : 0);
-                        const int cyo = y2 < 10 ? 10 - y2 : (y2 >= 110 ? y2 - 109 : 0);
-                        if (cxo && cyo && cxo * cxo + cyo * cyo > 100) {
+                        const int cxo = x2 < rr ? rr - x2 : (x2 >= THUMB_W - rr ? x2 - (THUMB_W - rr - 1) : 0);
+                        const int cyo = y2 < rr ? rr - y2 : (y2 >= THUMB_H - rr ? y2 - (THUMB_H - rr - 1) : 0);
+                        if (cxo && cyo && cxo * cxo + cyo * cyo > rr * rr) {
                             continue; /* (canto redondo) */
                         }
                         px(tx0 + x2, ty0 + y2, (((r << 3) | (r >> 2)) << 16) | (((g << 2) | (g >> 4)) << 8) | ((b << 3) | (b >> 2)));
@@ -1540,8 +1555,8 @@ void miyoo_menu_render(uint32_t* page) {
                 }
             } else {
                 const char* t = tr("no picture", "sem imagem");
-                rrect(tx0, ty0, 160, 120, 10, TH(track), 255);
-                big(tx0 + 80 - big_width(t) / 2, ty0 + 47, t, TH(dim));
+                rrect(tx0, ty0, THUMB_W, THUMB_H, rr, TH(track), 255);
+                big(tx0 + THUMB_W / 2 - big_width(t) / 2, ty0 + THUMB_H / 2 - 13, t, TH(dim));
             }
         }
         big(24, HELP_Y + 6,
@@ -1572,7 +1587,12 @@ void miyoo_menu_render(uint32_t* page) {
     if (n > 0) {
         static char tmp[1024];
         const Item* it = tab_item(g_tab, *sel);
-        const char* h = (is_action(it) && !strcmp(it->name, "@quit"))
+        const char* h = (is_action(it) && !strcmp(it->name, "@reset"))
+                            ? tr("Saves the game (autosave) and starts it again from the beginning, with the intro, like the "
+                                 "N64 reset button. Press A twice.",
+                                 "Salva o jogo (salvar sozinho) e começa de novo do início, com a abertura, como o botão de "
+                                 "reset do N64. Aperte A duas vezes.")
+                        : (is_action(it) && !strcmp(it->name, "@quit"))
                             ? tr("Saves the game (autosave) and quits, without the Game Switcher. Press A twice.",
                                  "Salva o jogo (salvar sozinho) e sai, sem o Game Switcher. Aperte A duas vezes.")
                         : is_action(it) ? tr("Every option in this menu goes back to the port's factory values (and the "

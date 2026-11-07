@@ -57,7 +57,7 @@ extern int port_opt_idioma;
 void miyoo_video_toast(const char* text) __attribute__((weak));
 int miyoo_video_front(const uint32_t** page) __attribute__((weak)); /* pagina na tela, 640x480 girada 180 */
 void miyoo_quit(int code) __attribute__((weak));
-int miyoo_video_thumb(uint16_t* out) __attribute__((weak));   /* 160x120: a imagem do jogo quando o menu abriu */
+int miyoo_video_thumb(uint16_t* out) __attribute__((weak));   /* 256x192: a imagem do jogo quando o menu abriu */
 void miyoo_menu_status(const char* text) __attribute__((weak)); /* aviso dentro do menu de opcoes */
 void miyoo_menu_slots_changed(void) __attribute__((weak));
 void miyoo_menu_close_now(void) __attribute__((weak));
@@ -81,8 +81,8 @@ extern volatile int miyoo_battery_exit __attribute__((weak));
 #define RECENT_HIDDEN "/mnt/SDCARD/Roms/recentlist-hidden.json"
 #define KEYMAP ONION_DIR "/config/keymap.json"
 #define NSLOTS 10
-#define THUMB_W 160
-#define THUMB_H 120
+#define THUMB_W 256 /* (miniaturas antigas, de 160x120, sao ampliadas ao ler) */
+#define THUMB_H 192
 
 #define SS_MAGIC 0x3353534Fu /* "OSS3" */
 #define RAM_BASE 0x80000000u
@@ -92,7 +92,7 @@ extern volatile int miyoo_battery_exit __attribute__((weak));
 /* pedidos para o jogo (graph.c: Port_SsFrame) */
 enum { OP_NONE, OP_SAVE_QUICK, OP_LOAD_QUICK, OP_EXIT, OP_LOAD_AUTO, OP_SAVE_SLOT, OP_LOAD_SLOT };
 /* jeitos de fechar */
-enum { EXIT_QUIT, EXIT_SWITCHER, EXIT_POWEROFF, EXIT_BATTERY, EXIT_QUICK_SWITCH, EXIT_RESTART };
+enum { EXIT_QUIT, EXIT_SWITCHER, EXIT_POWEROFF, EXIT_BATTERY, EXIT_QUICK_SWITCH, EXIT_RESTART, EXIT_RESET };
 /* acoes do MENU no OnionOS (keymon) */
 enum { MENU_OFF, MENU_SWITCHER, MENU_EXIT, MENU_QUICK_SWITCH, MENU_RA_MENU };
 enum { MENU_SINGLE, MENU_LONG, MENU_DOUBLE };
@@ -945,6 +945,11 @@ static void exit_without_state(int kind) {
         return; /* (o jogo ja esta salvando e fechando) */
     }
     fprintf(stderr, "[estado] fechando sem estado\n");
+    if (kind == EXIT_RESET) { /* reiniciar do comeco: sem estado para continuar */
+        remove(AUTO_STATE);
+        remove(BOOT_RESUME);
+        restart_now();
+    }
     if (kind == EXIT_RESTART) { /* (fora do jogo: so abre de novo, do inicio) */
         if (!g_bootLoad) {
             remove(AUTO_STATE);
@@ -1222,17 +1227,34 @@ int port_ss_slot_info(int slot, long* when) {
     return state_usable(path) ? 1 : -1;
 }
 
-/* a miniatura (160x120 RGB565) do estado slot; 1 = lida */
+/* a miniatura (256x192 RGB565) do estado slot; 1 = lida. As das versoes antigas (160x120) sao ampliadas. */
 int port_ss_slot_thumb(int slot, uint16_t* out) {
     char path[64];
     FILE* f;
-    int ok;
+    long size;
+    int ok = 0;
     slot_path(path, sizeof path, slot, "thm");
     f = fopen(path, "rb");
     if (f == NULL) {
         return 0;
     }
-    ok = fread(out, 2, THUMB_W * THUMB_H, f) == THUMB_W * THUMB_H;
+    fseek(f, 0, SEEK_END);
+    size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (size == THUMB_W * THUMB_H * 2) {
+        ok = fread(out, 2, THUMB_W * THUMB_H, f) == THUMB_W * THUMB_H;
+    } else if (size == 160 * 120 * 2) {
+        static uint16_t old[160 * 120];
+        if (fread(old, 2, 160 * 120, f) == 160 * 120) {
+            int x, y;
+            for (y = 0; y < THUMB_H; y++) {
+                for (x = 0; x < THUMB_W; x++) {
+                    out[y * THUMB_W + x] = old[(y * 120 / THUMB_H) * 160 + x * 160 / THUMB_W];
+                }
+            }
+            ok = 1;
+        }
+    }
     fclose(f);
     return ok;
 }
@@ -1274,14 +1296,15 @@ int port_ss_save_slot(uint16_t seqMain, uint16_t seqSub) {
 
 /* fechar com o estado (o jogo no ponto seguro): grava state_auto.oss e a imagem do Game Switcher. Nao volta. */
 void port_ss_exit(uint16_t seqMain, uint16_t seqSub) {
-    static const char* names[] = { "fechar", "Game Switcher", "desligar", "bateria no fim", "jogo anterior", "reiniciar" };
+    static const char* names[] = { "fechar", "Game Switcher", "desligar", "bateria no fim", "jogo anterior", "reiniciar",
+                                   "reiniciar do comeco" };
     const int kind = g_exitKind < 0 ? EXIT_QUIT : g_exitKind;
     const int off = kind == EXIT_POWEROFF || kind == EXIT_BATTERY;
     uint8_t* b;
     size_t len;
     int ok = 0;
-    if (g_bootLoad) {
-        exit_without_state(kind); /* (a retomada nem aconteceu) */
+    if (g_bootLoad || kind == EXIT_RESET) {
+        exit_without_state(kind); /* (a retomada nem aconteceu; ou reiniciar do comeco, sem estado) */
     }
     if (!begin_exit()) {
         for (;;) {
@@ -1328,6 +1351,12 @@ void port_ss_exit(uint16_t seqMain, uint16_t seqSub) {
 /* menu de opcoes: uma opcao que so vale ao abrir o jogo mudou e o jogador quer reiniciar ja */
 void port_ss_restart_request(void) {
     request_exit(EXIT_RESTART);
+}
+
+/* menu de opcoes, "Reiniciar o jogo": abre de novo do comeco (abertura, tela de arquivos), como o reset do N64;
+ * antes salva o jogo sozinho, como o "Sair" (se autosave) */
+void port_ss_reset_request(void) {
+    request_exit(EXIT_RESET);
 }
 
 /* menu de opcoes, "Sair do jogo": fecha como o MENU fora do OnionOS (o jogo salva sozinho, se autosave, e sai) */

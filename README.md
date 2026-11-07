@@ -39,6 +39,8 @@ from your European ROM.
 - Smooth D-pad turning (Link turns in smooth curves, like with an analog stick)
 - Natural aiming (up looks up) and smooth aiming, for first person, the slingshot, the bow and the hookshot
 - Mid-air steering: the D-pad nudges Link's direction while jumping or falling (up to 45 degrees, not a full turn)
+- Slow walk: hold R2 to walk slowly (a quick tap on R2 is still C-Right)
+- Optional ledge grab: turn it off and Link falls off ledges instead of hanging from them
 - Sprint: keep holding A after a roll
 - Improved roll
 - Ocarina on the D-pad (C buttons) and the shoulder buttons (Z and R bend the note)
@@ -135,6 +137,7 @@ When you update the port to a new version, just replace the files: the game data
 | B | Jump (and B in menus and dialogs) |
 | Y | Sword (the N64's B) |
 | L2 / X / R2 | C-Left / C-Down / C-Right |
+| R2 (hold) | Walk slowly (a quick tap is still C-Right) |
 | Select (tap) | C-Up (first person, Navi) |
 | L1 | Z (target) |
 | R1 | R (shield) |

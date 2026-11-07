@@ -1231,7 +1231,9 @@ static void menu_bg_build(void) {
     g_menuBgLv = lv;
 }
 static int g_menuShown;
-static uint16_t g_menuThumb[160 * 120]; /* a imagem do jogo quando o menu abriu, 160x120 RGB565 */
+#define MTHUMB_W 256
+#define MTHUMB_H 192
+static uint16_t g_menuThumb[MTHUMB_W * MTHUMB_H]; /* a imagem do jogo quando o menu abriu, 256x192 RGB565 */
 static volatile int g_menuThumbOk;
 
 /* port/savestate.c: a miniatura de um estado salvo pelo menu */
@@ -1638,24 +1640,29 @@ static void* flip_proc(void* arg) {
                     }
                 }
                 {
-                    /* miniatura 160x120 da imagem do jogo (estados do menu): media de 4x4, ja na orientacao certa */
+                    /* miniatura 256x192 da imagem do jogo (estados do menu): cada ponto e a media do retangulo de
+                     * 2 ou 3 pixels de lado que ele cobre (640/256 = 2,5), ja na orientacao certa */
                     int tx, ty;
-                    for (ty = 0; ty < 120; ty++) {
-                        for (tx = 0; tx < 160; tx++) {
-                            unsigned r = 0, g = 0, b = 0, dy, dx;
-                            for (dy = 0; dy < 4; dy++) {
-                                const uint32_t* row = front + (size_t)(PANEL_H - 1 - (ty * 4 + dy)) * PANEL_W;
-                                for (dx = 0; dx < 4; dx++) {
-                                    const uint32_t c = row[PANEL_W - 1 - (tx * 4 + dx)];
+                    for (ty = 0; ty < MTHUMB_H; ty++) {
+                        const int y0 = ty * PANEL_H / MTHUMB_H, y1 = (ty + 1) * PANEL_H / MTHUMB_H;
+                        for (tx = 0; tx < MTHUMB_W; tx++) {
+                            const int x0 = tx * PANEL_W / MTHUMB_W, x1 = (tx + 1) * PANEL_W / MTHUMB_W;
+                            unsigned r = 0, g = 0, b = 0, k = 0;
+                            int yy, xx;
+                            for (yy = y0; yy < y1; yy++) {
+                                const uint32_t* row = front + (size_t)(PANEL_H - 1 - yy) * PANEL_W;
+                                for (xx = x0; xx < x1; xx++) {
+                                    const uint32_t c = row[PANEL_W - 1 - xx];
                                     r += (c >> 16) & 255;
                                     g += (c >> 8) & 255;
                                     b += c & 255;
+                                    k++;
                                 }
                             }
-                            r >>= 4;
-                            g >>= 4;
-                            b >>= 4;
-                            g_menuThumb[ty * 160 + tx] = (uint16_t)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
+                            r /= k;
+                            g /= k;
+                            b /= k;
+                            g_menuThumb[ty * MTHUMB_W + tx] = (uint16_t)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
                         }
                     }
                     g_menuThumbOk = 1;

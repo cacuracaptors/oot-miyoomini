@@ -91,6 +91,8 @@ int port_opt_ask_to_equip = 0;
 int port_opt_minimal_ui = 0;
 int port_tt_novoid; /* (codigo do jogo: viagem no tempo sem o dano da queda) */
 
+int port_opt_slow_walk = 1;  /* miyoo/input_miyoo.c: R2 segurado = andar devagar (toque = C-direita) */
+int port_opt_ledge_grab = 1; /* z_player.c: 0 = ao sair andando de uma beirada, cai em vez de se agarrar nela */
 int port_opt_air_steering = 1; /* z_player.c: direcao no ar (Port_AirSteer) */
 int port_opt_better_roll = 0; /* z_player.c: rolada encadeada e com direcao */
 int port_opt_fast_farores = 0;
@@ -236,6 +238,10 @@ static const struct {
       "with manual_jump: 1 = Link also jumps by himself when he runs off a ledge (like the original); 0 = no automatic jump: he falls off the ledge, and only the jump button jumps" },
     { "Controls", "jump_strength", "", &port_opt_jump_strength,
       "manual jump: minimum jump strength x10 (56 = 5.6; higher = taller jump). The running jump uses the game's own value when it is stronger" },
+    { "Controls", "slow_walk", "", &port_opt_slow_walk,
+      "1 = holding R2 makes Link walk slowly (a quick tap on R2 is still the C-Right item, like the slingshot); 0 = R2 is only C-Right" },
+    { "Controls", "ledge_grab", "", &port_opt_ledge_grab,
+      "1 = like the original: walking off a ledge, Link grabs the edge and hangs from it; 0 = he just falls (useful with the manual jump and the automatic jump off). Vines, ladders and grabbing a ledge in mid-air still work" },
     { "Controls", "air_steering", "", &port_opt_air_steering,
       "1 = in the air (jumping or falling) the D-pad steers Link a little, up to 45 degrees to each side of the direction he left the ground in (a nudge, not a turn); 0 = like the original" },
     { "Controls", "sprint_speed", "", &port_opt_sprint_speed,
@@ -705,6 +711,8 @@ static const struct {
     { "jump_on_b", 1 },
     { "auto_jump", 1 },
     { "jump_strength", 70 },
+    { "slow_walk", 1 },
+    { "ledge_grab", 1 },
     { "air_steering", 1 },
     { "sprint_speed", 150 },
     { "quick_gear_swap", 0 },

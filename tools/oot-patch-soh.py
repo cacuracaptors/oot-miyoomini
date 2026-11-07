@@ -2112,6 +2112,20 @@ patch_file("src/overlays/actors/ovl_player_actor/z_player.c", [
      "                    ({ extern int port_opt_auto_jump, port_opt_manual_jump; port_opt_auto_jump || !port_opt_manual_jump; })) { /* port */\n"),
 ])
 
+# port: opcao ledge_grab 0: ao sair andando de uma beirada (sem o pulo automatico), Link cai em vez de se agarrar
+# sozinho na borda. As trepadeiras e escadas (agarrar para descer) continuam; agarrar uma borda no ar, caindo de
+# frente para uma parede, tambem.
+patch_file("src/overlays/actors/ovl_player_actor/z_player.c", [
+    ("agarrar a borda opcional",
+     "            func_8083A5C4(play, this, sp84, sp54,\n"
+     "                          sp50 ? &gPlayerAnim_link_normal_Fclimb_startB : &gPlayerAnim_link_normal_fall);\n",
+     "            if (!sp50 && !({ extern int port_opt_ledge_grab; port_opt_ledge_grab; })) {\n"
+     "                return 0; /* port: opcao ledge_grab 0 (cai em vez de se agarrar) */\n"
+     "            }\n"
+     "            func_8083A5C4(play, this, sp84, sp54,\n"
+     "                          sp50 ? &gPlayerAnim_link_normal_Fclimb_startB : &gPlayerAnim_link_normal_fall);\n"),
+])
+
 # ---------------------------------------------------------------- port: pulo manual (opcao manual_jump, botao X)
 # Com Link no chao, parado/andando/correndo (inclusive mirando com Z), o botao de pulo usa o mesmo pulo do jogo
 # para beiradas (func_8083A4A8: correndo = pulo longo; parado = pulo curto). Nao pula nadando, escalando,
