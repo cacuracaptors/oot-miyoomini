@@ -185,6 +185,7 @@ extern int gx_hr_max_opt, gx_hr_alvo, gx_hr_texto, gx_retro, gx_retro_forca; /* 
 int port_opt_nucleos_fixos = 1;  /* desenho no nucleo 0, auxiliar do desenho no 1 */
 int port_opt_clock = 1600;          /* MHz da CPU ao abrir o jogo (0 = o que o sistema deixar, 1200) */
 int port_opt_clock_guard = 1; /* 1 = se o clock da CPU cair sozinho durante o jogo, pede de novo (a cada 10 s) */
+extern int gx_mistura_desliza;           /* gfx_fast.inc: texturas que deslizam pre-misturadas (lote 183) */
 extern int gx_ceu_mistura, gx_corte; /* gfx_fast.inc: ceu pre-misturado e recorte (teste da lentidao) */
 extern int port_fi_enabled;      /* port/frame_interp.c: quadros intermediarios (30 por segundo) */
 extern int port_opt_idioma;      /* port/lang.c: pacote de idioma */
@@ -564,6 +565,8 @@ static const struct {
     { "Performance", "fused_draw", "desenho_fundido", &gx_fused, "1 = newer span drawing (8 pixels at a time), 0 = the older one" },
     { "Performance", "sky_premix", "", &gx_ceu_mistura,
       "1 = textures that the game blends by a constant (sky, some grounds) are blended once and reused; 0 = blended on every pixel" },
+    { "Performance", "premix_scrolling", "", &gx_mistura_desliza,
+      "with sky_premix: 1 = two sliding textures blended by a constant (water of Lake Hylia and Zora's Domain) are also blended once per frame and the water reads one texture instead of two (lighter; one layer may look a tiny bit softer); 0 = blended on every pixel" },
     { "Performance", "crop_transparent", "", &gx_corte,
       "1 = the empty (transparent) part of mostly-empty textures is not drawn; 0 = drawn like before" },
     { "Performance", "stream_draw", "desenho_junto", &gx_stream,
@@ -880,6 +883,7 @@ static const struct {
     { "depth_points", 1 },
     { "always_downscale", 0 },
     { "deferred_real_frame", 1 },
+    { "premix_scrolling", 1 },
     { "sort_opaque", 1 },
     { "sort_batch", 160 },
     { "fused_draw", 1 },

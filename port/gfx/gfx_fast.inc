@@ -433,11 +433,29 @@ static void fused_check(FastProg *f);
  * refeita quando k anda 3 ou mais (o ceu muda devagar; diferenca de no maximo 3/255 da distancia entre as duas,
  * menos de 1 degrau da tela). Opcao gx_ceu_mistura (replay --sem-mistura). */
 int gx_ceu_mistura = 1;
+/* Lote 183: a agua (lago Hylia, Dominio Zora) mistura 2 texturas que deslizam em direcoes e escalas diferentes,
+ * (T1 - T0) * k + T0 com k constante. As duas repetem, entao a mistura tambem repete: ela e feita numa textura
+ * (ate 64x64) numa grade fina o bastante para as duas (a escala da mais detalhada em cada eixo), com a 2a ja
+ * deslocada, e o pixel le uma textura so (metade das leituras de textura). Quando as grades coincidem e o
+ * deslocamento e inteiro o resultado e o mesmo; senao uma das camadas passa por um filtro a mais (um pouco mais
+ * suave). Refeita quando o deslocamento muda (todo quadro, enquanto desliza). Opcao gx_mistura_desliza
+ * (options.txt premix_scrolling; replay --sem-mistura-desliza). */
+int gx_mistura_desliza = 1;
+typedef struct {
+    int sizeS, sizeT;   /* textura misturada */
+    int raS, raT;       /* passo da 1a textura por texel da grade, em 1/64 de texel (64 = mesma grade) */
+    int rbS, rbT;       /* idem, 2a */
+    int obS, obT;       /* posicao da 2a no texel 0 da grade, em 1/64 de texel (0 .. 64*w-1) */
+    GxTile tile;        /* tile da textura misturada (no lugar da tile da 1a) */
+} PremixGeo;
+static PremixGeo g_pmGeo;
+static int g_premixTile; /* 1 = a textura misturada desta montagem usa g_pmGeo.tile */
 #define PREMIX_N 16
 typedef struct {
     const GxTex *a, *b;
     uint64_t ka, kb;
     int v, used;
+    uint64_t geo; /* forma da mistura deslocada/escalada (0 = as duas tiles iguais; lote 183) */
     GxTex *m; /* (estrutura propria: ao refazer, a antiga vai para a fila de aposentadas) */
 } PremixEnt;
 static PremixEnt g_pm[PREMIX_N];
@@ -477,17 +495,95 @@ static void premix_retire(GxTex *m) {
     g_pmRetGen[g_pmRi] = g_flushGen;
     g_pmRi = (g_pmRi + 1) % PREMIX_RETIRE;
 }
-static GxTex *premix_get(const GxTex *A, const GxTex *B, int v) {
+/* expoente de 2 da escala de uma tile (texels por unidade de S): shift 1..10 divide, 11..15 multiplica */
+static int shift_exp(int sh) {
+    return sh == 0 ? 0 : sh <= 10 ? -sh : 16 - sh;
+}
+static int exp_shift(int e) {
+    return e == 0 ? 0 : e < 0 ? -e : 16 - e;
+}
+static int ilog2i(int v) {
+    int r = 0;
+    while ((1 << r) < v) r++;
+    return r;
+}
+/* mistura com as tiles diferentes (lote 183): as duas repetem inteiras (mascara = tamanho, sem espelho nem trava);
+ * monta a grade da mistura e a tile dela. 0 = nao da (grande demais, escalas muito diferentes, ...) */
+static int premix_geo(const GxTex *A, const GxTex *B, const GxTile *ta, const GxTile *tb, PremixGeo *g) {
+    int ax;
+    if (ta->cms || ta->cmt || tb->cms || tb->cmt || !ta->masks || !ta->maskt || !tb->masks || !tb->maskt ||
+        (1 << ta->masks) != A->w || (1 << ta->maskt) != A->h || (1 << tb->masks) != B->w || (1 << tb->maskt) != B->h ||
+        A->clipw != A->w || A->cliph != A->h || B->clipw != B->w || B->cliph != B->h) {
+        return 0;
+    }
+    g->tile = *ta;
+    for (ax = 0; ax < 2; ax++) {
+        const int eA = shift_exp(ax ? ta->shiftt : ta->shifts), eB = shift_exp(ax ? tb->shiftt : tb->shifts);
+        const int ge = eA > eB ? eA : eB; /* grade: a escala mais detalhada */
+        const int wa = ax ? A->h : A->w, wb = ax ? B->h : B->w;
+        const int ulA = ax ? ta->ult : ta->uls, ulB = ax ? tb->ult : tb->uls;
+        int ra, rb, na, nb, size, ulM, ob;
+        if (ge - eA > 2 || ge - eB > 2 || ge > 5 || ge < -10) {
+            return 0;
+        }
+        ra = 64 >> (ge - eA); /* passo de cada uma por texel da grade, em 1/64 de texel */
+        rb = 64 >> (ge - eB);
+        na = wa << (ge - eA); /* periodo de cada uma em texels da grade */
+        nb = wb << (ge - eB);
+        size = na > nb ? na : nb;
+        if (size > 64) {
+            return 0;
+        }
+        /* grade: u = S*2^ge - ulM/4. Com ulM = ulA * 2^(ge-eA) a 1a fica em u * ra/64 (reduzido ao periodo, que e
+         * multiplo dos dois). A 2a fica em (u + ulM/4) * rb/64 - ulB/4: em 1/64 de texel, u*rb + (ulM*rb - 64*ulB)/4 */
+        ulM = (ulA << (ge - eA)) & (4 * size - 1);
+        ob = (ulM * rb - 64 * ulB) / 4;
+        ob &= 64 * wb - 1;
+        if (ax) {
+            g->sizeT = size; g->raT = ra; g->rbT = rb; g->obT = ob;
+            g->tile.shiftt = (uint8_t)exp_shift(ge); g->tile.maskt = (uint8_t)ilog2i(size); g->tile.ult = (uint16_t)ulM;
+        } else {
+            g->sizeS = size; g->raS = ra; g->rbS = rb; g->obS = ob;
+            g->tile.shifts = (uint8_t)exp_shift(ge); g->tile.masks = (uint8_t)ilog2i(size); g->tile.uls = (uint16_t)ulM;
+        }
+    }
+    g->tile.cms = g->tile.cmt = 0;
+    return g->sizeS * g->sizeT <= 4096;
+}
+
+/* texel da textura (RGBA8888, repete; w e h potencias de 2) na posicao (ps, pt) em 1/64 de texel, linear entre 4
+ * (resultado x 4096) */
+static inline void premix_tap(const uint8_t *px, int w, int h, int ps, int pt, int *out) {
+    const int x0 = (ps >> 6) & (w - 1), y0 = (pt >> 6) & (h - 1), x1 = (x0 + 1) & (w - 1), y1 = (y0 + 1) & (h - 1);
+    const int fs = ps & 63, ft = pt & 63;
+    const uint8_t *a = px + 4 * (y0 * w + x0), *b = px + 4 * (y0 * w + x1);
+    const uint8_t *c = px + 4 * (y1 * w + x0), *d = px + 4 * (y1 * w + x1);
+    int k;
+    if (fs == 0 && ft == 0) {
+        for (k = 0; k < 4; k++) out[k] = a[k] << 12;
+        return;
+    }
+    for (k = 0; k < 4; k++) {
+        const int top = a[k] * (64 - fs) + b[k] * fs, bot = c[k] * (64 - fs) + d[k] * fs;
+        out[k] = top * (64 - ft) + bot * ft;
+    }
+}
+
+static GxTex *premix_get(const GxTex *A, const GxTex *B, int v, const PremixGeo *pg) {
     PremixEnt *e = NULL;
     GxTex *m;
     int i, n;
+    const uint64_t geo = pg == NULL ? 0
+                         : (((uint64_t)(uint32_t)pg->obS << 40) ^ ((uint64_t)(uint32_t)pg->obT << 20) ^
+                            (uint64_t)(uint32_t)(pg->sizeS << 12 | pg->sizeT << 4) ^
+                            ((uint64_t)(uint32_t)(pg->raS ^ pg->raT << 7 ^ pg->rbS << 14 ^ pg->rbT << 21) << 30)) | 1;
     for (i = 0; i < PREMIX_N; i++) {
         if (g_pm[i].a == A && g_pm[i].b == B && g_pm[i].ka == A->key && g_pm[i].kb == B->key && g_pm[i].m != NULL) {
             e = &g_pm[i];
             break;
         }
     }
-    if (e != NULL && abs(e->v - v) < 3) {
+    if (e != NULL && abs(e->v - v) < 3 && e->geo == geo) {
         e->used = ++g_pmClock;
         return e->m;
     }
@@ -499,7 +595,7 @@ static GxTex *premix_get(const GxTex *A, const GxTex *B, int v) {
             }
         }
     }
-    n = A->w * A->h;
+    n = pg != NULL ? pg->sizeS * pg->sizeT : A->w * A->h;
     m = (GxTex *)calloc(1, sizeof *m);
     if (m == NULL) {
         return NULL;
@@ -509,19 +605,37 @@ static GxTex *premix_get(const GxTex *A, const GxTex *B, int v) {
         free(m);
         return NULL;
     }
-    {
+    if (pg == NULL) {
         const uint8_t *pa = (const uint8_t *)A->px, *pb = (const uint8_t *)B->px;
         uint8_t *pm = (uint8_t *)m->px;
         for (i = 0; i < n * 4; i++) {
             int r = ((((int)pb[i] - (int)pa[i]) * v + 0x80) >> 8) + pa[i];
             pm[i] = (uint8_t)(r < 0 ? 0 : (r > 255 ? 255 : r));
         }
+        m->w = A->w;
+        m->h = A->h;
+        m->clipw = A->clipw < B->clipw ? A->clipw : B->clipw;
+        m->cliph = A->cliph < B->cliph ? A->cliph : B->cliph;
+    } else {
+        const uint8_t *pa = (const uint8_t *)A->px, *pb = (const uint8_t *)B->px;
+        uint8_t *pm = (uint8_t *)m->px;
+        int x, y, c, va[4], vb[4];
+        for (y = 0; y < pg->sizeT; y++) {
+            for (x = 0; x < pg->sizeS; x++) {
+                uint8_t *o = pm + 4 * (y * pg->sizeS + x);
+                premix_tap(pa, A->w, A->h, x * pg->raS, y * pg->raT, va);
+                premix_tap(pb, B->w, B->h, pg->obS + x * pg->rbS, pg->obT + y * pg->rbT, vb);
+                for (c = 0; c < 4; c++) {
+                    const int a = (va[c] + 2048) >> 12, b = (vb[c] + 2048) >> 12;
+                    const int r = (((b - a) * v + 0x80) >> 8) + a;
+                    o[c] = (uint8_t)(r < 0 ? 0 : (r > 255 ? 255 : r));
+                }
+            }
+        }
+        m->w = m->clipw = pg->sizeS;
+        m->h = m->cliph = pg->sizeT;
     }
-    m->w = A->w;
-    m->h = A->h;
-    m->clipw = A->clipw < B->clipw ? A->clipw : B->clipw;
-    m->cliph = A->cliph < B->cliph ? A->cliph : B->cliph;
-    m->key = A->key ^ (B->key * 0x9E3779B97F4A7C15ull) ^ (uint64_t)v;
+    m->key = A->key ^ (B->key * 0x9E3779B97F4A7C15ull) ^ (uint64_t)v ^ (geo * 0xC2B2AE3D27D4EB4Full);
     m->hdk = 1;
     m->hdTried = 1;
     if (e->m != NULL) {
@@ -533,6 +647,7 @@ static GxTex *premix_get(const GxTex *A, const GxTex *B, int v) {
     e->ka = A->key;
     e->kb = B->key;
     e->v = v;
+    e->geo = geo;
     e->used = ++g_pmClock;
     return e->m;
 }
@@ -685,11 +800,21 @@ static void fast_build(void) {
         const GxTex *A = gx.rtex[0], *B = gx.rtex[1];
         const GxTile *ta = &gx.tile[gx.texTile & 7], *tb = &gx.tile[(gx.texTile + 1) & 7];
         GxTex *mix = NULL;
-        int ok = gx_ceu_mistura && f->cyc2 && A != NULL && B != NULL && A != B && A->hd == NULL && B->hd == NULL &&
-                 A->px != NULL && B->px != NULL && A->w == B->w && A->h == B->h && ta->shifts == tb->shifts &&
-                 ta->shiftt == tb->shiftt && ta->uls == tb->uls && ta->ult == tb->ult && ta->masks == tb->masks &&
-                 ta->maskt == tb->maskt && ta->cms == tb->cms && ta->cmt == tb->cmt;
+        int ok = gx_ceu_mistura && f->cyc2 && A != NULL && B != NULL && A->hd == NULL && B->hd == NULL &&
+                 A->px != NULL && B->px != NULL;
+        const int same = ok && A != B && A->w == B->w && A->h == B->h && ta->shifts == tb->shifts && ta->shiftt == tb->shiftt &&
+                         ta->uls == tb->uls && ta->ult == tb->ult && ta->masks == tb->masks && ta->maskt == tb->maskt &&
+                         ta->cms == tb->cms && ta->cmt == tb->cmt;
+        const PremixGeo *pg = NULL;
         int kv = -1, msel = -1;
+        g_premixTile = 0;
+        if (ok && !same) {
+            /* (a mesma textura nas duas tiles com a mesma forma: nada a misturar; premix_geo recusa as tiles iguais) */
+            ok = gx_mistura_desliza &&
+                 !(A == B && ta->uls == tb->uls && ta->ult == tb->ult && ta->shifts == tb->shifts && ta->shiftt == tb->shiftt) &&
+                 premix_geo(A, B, ta, tb, &g_pmGeo);
+            pg = &g_pmGeo;
+        }
         for (ch = 0; ok && ch < 4; ch++) {
             const uint8_t *c = f->c0[ch];
             int i2, usesT = 0;
@@ -718,10 +843,11 @@ static void fast_build(void) {
         if (ok && msel >= 0) {
             kv = msel < V_ENV ? gx.prim[msel - V_PRIM] : gx.env[msel - V_ENV];
             if (kv > 0 && kv < 255) {
-                mix = premix_get(A, B, kv);
+                mix = premix_get(A, B, kv, pg);
             }
         }
         g_premixTx = mix;
+        g_premixTile = mix != NULL && pg != NULL;
         if (mix != NULL) {
             for (ch = 0; ch < 4; ch++) {
                 if (f->c0[ch][2] == msel && f->c0[ch][0] == V_T1 + ch) {
@@ -881,7 +1007,7 @@ static void fast_build(void) {
         }
     }
     for (k = 0; k < 2; k++) {
-        const GxTile *tl = &gx.tile[(gx.texTile + k) & 7];
+        const GxTile *tl = (k == 0 && g_premixTile) ? &g_pmGeo.tile : &gx.tile[(gx.texTile + k) & 7];
         FastTex *u = &f->t[k];
         int hk = 1, hb = 0;
         u->tx = (k == 0 && g_premixTx != NULL) ? g_premixTx : gx.rtex[k];

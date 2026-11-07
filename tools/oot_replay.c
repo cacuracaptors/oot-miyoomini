@@ -368,6 +368,9 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "--sem-fundo-misto")) {
             extern int gx_bgmix;
             gx_bgmix = 0;
+        } else if (!strcmp(argv[i], "--sem-mistura-desliza")) {
+            extern int gx_mistura_desliza;
+            gx_mistura_desliza = 0; /* texturas que deslizam misturadas por pixel (como antes do lote 183) */
         } else if (!strcmp(argv[i], "--sem-fundo")) {
             gx_bgdefer = 0;
         } else if (!strcmp(argv[i], "--nofused")) {
