@@ -715,17 +715,13 @@ static int dynamic_piece(int x0, int y0, int x1, int y1, uint64_t key) {
 }
 
 /* varredura: uma peca que da para o acelerador (r pronto) no retangulo (640x480) */
-/* (lote 169) triangulo sozinho que muda (a seta do Link no minimapa, girando): fica com os nucleos mesmo com a opcao
- * hud_changing_on_accelerator. No acelerador ela era refeita e copiada sem ampliacao em toda imagem, e com ela la a
- * barra de magia saia com lixo no Lago Hylia (o MI_GFX copiando a barra errado; com a seta nos nucleos, nao) */
-static int g_scanTri;
 static int scan_ok(const GePrep *r, int x0, int y0, int x1, int y1) {
     int ok = 1;
     if ((x1 - x0) * (y1 - y0) < GE_MIN_AREA && !gx_ge_pequenas) {
         ok = 2;
     }
     if (ok == 1 && dynamic_piece(x0, y0, x1, y1, r->key) &&
-        !(gx_ge_mudando && !g_scanTri && r->sw * r->sh <= (logo_on() ? GE_DYN_LOGO : GE_DYN_MAX))) {
+        !(gx_ge_mudando && r->sw * r->sh <= (logo_on() ? GE_DYN_LOGO : GE_DYN_MAX))) {
         ok = 3; /* muda a cada desenho: os nucleos */
     }
     g_need = bake_has(r->key) ? 0u : (uint32_t)(r->sw * r->sh);
@@ -1575,9 +1571,7 @@ int gx_ge_tri(const GxVtx *a, const GxVtx *b, const GxVtx *c) {
         int ok = 0;
         g_need = 0;
         if (!g_inText && tri_prep(&r, &g, tv)) {
-            g_scanTri = 1;
             ok = scan_ok(&r, g.X0, g.Y0, g.X0 + g.W, g.Y0 + g.H);
-            g_scanTri = 0;
         }
         g_pendOk = ok;
         g_pendNeed = g_need;
