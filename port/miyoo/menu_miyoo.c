@@ -376,7 +376,9 @@ static int g_slotState[NSLOTS]; /* 0 vazio, 1 ok, -1 de outra versao */
 static long g_slotWhen[NSLOTS];
 #define THUMB_W 256 /* (port/savestate.c: miniaturas 256x192) */
 #define THUMB_H 192
-static uint16_t g_thumbs[NSLOTS][THUMB_W * THUMB_H];
+/* (malloc, nao estatico: o executavel tem de acabar antes de 0x81000000, onde o jogo ainda enxerga os dados dele;
+ * com 1 MB a mais de dados estaticos o z-buffer do jogo passou dessa linha no lote 159) */
+static uint16_t (*g_thumbs)[THUMB_W * THUMB_H];
 static int g_thumbOk[NSLOTS];
 static volatile int g_slotsDirty = 1;
 static int g_saveArmed = -1; /* estado com o 1o X (gravar por cima pede o 2o) */
@@ -388,7 +390,10 @@ static void load_slots(void) {
     g_slotsDirty = 0;
     for (i = 0; i < NSLOTS; i++) {
         g_slotState[i] = port_ss_slot_info(i, &g_slotWhen[i]);
-        g_thumbOk[i] = g_slotState[i] != 0 && port_ss_slot_thumb(i, g_thumbs[i]);
+        if (g_thumbs == NULL) {
+            g_thumbs = malloc(sizeof *g_thumbs * NSLOTS);
+        }
+        g_thumbOk[i] = g_thumbs != NULL && g_slotState[i] != 0 && port_ss_slot_thumb(i, g_thumbs[i]);
     }
 }
 

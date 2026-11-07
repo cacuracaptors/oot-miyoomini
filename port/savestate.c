@@ -1244,8 +1244,8 @@ int port_ss_slot_thumb(int slot, uint16_t* out) {
     if (size == THUMB_W * THUMB_H * 2) {
         ok = fread(out, 2, THUMB_W * THUMB_H, f) == THUMB_W * THUMB_H;
     } else if (size == 160 * 120 * 2) {
-        static uint16_t old[160 * 120];
-        if (fread(old, 2, 160 * 120, f) == 160 * 120) {
+        uint16_t* old = malloc(160 * 120 * 2);
+        if (old != NULL && fread(old, 2, 160 * 120, f) == 160 * 120) {
             int x, y;
             for (y = 0; y < THUMB_H; y++) {
                 for (x = 0; x < THUMB_W; x++) {
@@ -1254,6 +1254,7 @@ int port_ss_slot_thumb(int slot, uint16_t* out) {
             }
             ok = 1;
         }
+        free(old);
     }
     fclose(f);
     return ok;
@@ -1276,11 +1277,12 @@ int port_ss_save_slot(uint16_t seqMain, uint16_t seqSub) {
     }
     pthread_mutex_unlock(&g_m);
     if (ok && miyoo_video_thumb != NULL) {
-        static uint16_t thumb[THUMB_W * THUMB_H];
-        if (miyoo_video_thumb(thumb)) {
+        uint16_t* thumb = malloc(THUMB_W * THUMB_H * 2); /* (nao estatico: ver menu_miyoo.c, g_thumbs) */
+        if (thumb != NULL && miyoo_video_thumb(thumb)) {
             slot_path(path, sizeof path, slot, "thm");
-            write_file(path, thumb, sizeof thumb);
+            write_file(path, thumb, THUMB_W * THUMB_H * 2);
         }
+        free(thumb);
     }
     if (ok) {
         snprintf(msg, sizeof msg, lang_text("Saved to state %d", "Salvo no estado %d"), slot + 1);

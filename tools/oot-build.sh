@@ -173,7 +173,10 @@ if [ "$(cat "$OUT/link.status")" = 0 ]; then
     echo "fim dos dados do executavel (_end): 0x$END"
     case "$END" in
         80[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) ;;
-        *) echo "AVISO: _end fora de 0x80000000..0x80FFFFFF: o renderizador nao enxerga os dados estaticos." ;;
+        *) echo "ERRO: _end fora de 0x80000000..0x80FFFFFF: o jogo e o renderizador nao enxergam os dados estaticos"
+           echo "      do fim do executavel (z-buffer, listas...). Executavel apagado: diminua os dados estaticos (use malloc)."
+           rm -f "$OUT/oot_headless"
+           exit 1 ;;
     esac
 fi
 

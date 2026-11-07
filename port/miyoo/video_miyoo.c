@@ -1233,7 +1233,8 @@ static void menu_bg_build(void) {
 static int g_menuShown;
 #define MTHUMB_W 256
 #define MTHUMB_H 192
-static uint16_t g_menuThumb[MTHUMB_W * MTHUMB_H]; /* a imagem do jogo quando o menu abriu, 256x192 RGB565 */
+/* a imagem do jogo quando o menu abriu, 256x192 RGB565 (malloc: os dados estaticos tem de acabar antes de 0x81000000) */
+static uint16_t* g_menuThumb;
 static volatile int g_menuThumbOk;
 
 /* port/savestate.c: a miniatura de um estado salvo pelo menu */
@@ -1241,7 +1242,7 @@ int miyoo_video_thumb(uint16_t* out) {
     if (!g_menuThumbOk) {
         return 0;
     }
-    memcpy(out, g_menuThumb, sizeof g_menuThumb);
+    memcpy(out, g_menuThumb, MTHUMB_W * MTHUMB_H * 2);
     return 1;
 }
 static volatile double g_toastUntil;
@@ -1643,7 +1644,10 @@ static void* flip_proc(void* arg) {
                     /* miniatura 256x192 da imagem do jogo (estados do menu): cada ponto e a media do retangulo de
                      * 2 ou 3 pixels de lado que ele cobre (640/256 = 2,5), ja na orientacao certa */
                     int tx, ty;
-                    for (ty = 0; ty < MTHUMB_H; ty++) {
+                    if (g_menuThumb == NULL) {
+                        g_menuThumb = (uint16_t*)malloc(MTHUMB_W * MTHUMB_H * 2);
+                    }
+                    for (ty = 0; g_menuThumb != NULL && ty < MTHUMB_H; ty++) {
                         const int y0 = ty * PANEL_H / MTHUMB_H, y1 = (ty + 1) * PANEL_H / MTHUMB_H;
                         for (tx = 0; tx < MTHUMB_W; tx++) {
                             const int x0 = tx * PANEL_W / MTHUMB_W, x1 = (tx + 1) * PANEL_W / MTHUMB_W;
@@ -1665,7 +1669,7 @@ static void* flip_proc(void* arg) {
                             g_menuThumb[ty * MTHUMB_W + tx] = (uint16_t)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
                         }
                     }
-                    g_menuThumbOk = 1;
+                    g_menuThumbOk = g_menuThumb != NULL;
                 }
                 if (g_menuBg != NULL) {
                     extern int gx_brilho;
