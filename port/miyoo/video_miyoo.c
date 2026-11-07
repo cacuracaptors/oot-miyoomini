@@ -553,10 +553,6 @@ static MI_PHY ge_phys[GX_GE_PARTS];
 static uint8_t* ge_virt[GX_GE_PARTS];
 static uint32_t ge_cap;
 static int ge_ok, ge_place;
-/* (TESTE do lote 172) as pecas viradas pelo processador numa memoria a parte e copiadas SEM o giro do MI_GFX: com o
- * giro, a barra de magia saia de vez em quando com linhas fora do lugar (memoria e numeros certos) */
-static MI_PHY ge_flipPhys;
-static uint32_t* ge_flipVirt;
 static unsigned g_geShown, g_geItems; /* (log) */
 
 static int ge_blit(MI_PHY src, int pw, int ph, const MI_GFX_Rect_t* sr, MI_PHY dst, int dw, int dh, const MI_GFX_Rect_t* dr,
@@ -720,16 +716,6 @@ static void ge_init(void) {
             ge_virt[i] = v;
         }
         if (i == GX_GE_PARTS) {
-            void* fv = NULL;
-            if (mi.MmaAlloc(NULL, sizes[k], &ge_flipPhys) == 0) {
-                if (mi.Mmap(ge_flipPhys, sizes[k], &fv, TRUE) == 0) {
-                    ge_flipVirt = (uint32_t*)fv;
-                } else {
-                    mi.MmaFree(ge_flipPhys);
-                }
-            }
-            fprintf(stderr, "video: TESTE 172: pecas do HUD viradas pelo processador, sem giro do MI_GFX: %s\n",
-                    ge_flipVirt ? "sim" : "nao (sem memoria)");
             ge_cap = sizes[k];
             ge_ok = 1;
             gx_ge_mem = ge_mem_cb;
@@ -765,33 +751,6 @@ static void ge_draw(const void* key, int back) {
     if (hi > lo && mem != NULL) {
         mi.Flush((void*)(mem + lo), hi - lo); /* (os texels novos estao no cache do processador) */
     }
-    if (ge_flipVirt != NULL && !ge_place && hw_rotate == E_MI_GFX_ROTATE_180 && hw_mirror == E_MI_GFX_MIRROR_NONE) {
-        uint32_t end = 0;
-        for (i = 0; i < n; i++) {
-            const uint32_t* s = (const uint32_t*)(mem + it[i].off);
-            uint32_t* d = ge_flipVirt + it[i].off / 4u;
-            const int pw = it[i].pw, ph = it[i].ph;
-            int x, y;
-            for (y = 0; y < ph; y++) {
-                const uint32_t* sr0 = s + (size_t)(ph - 1 - y) * (size_t)pw + (size_t)(pw - 1);
-                uint32_t* dr0 = d + (size_t)y * (size_t)pw;
-                for (x = 0; x < pw; x++) {
-                    dr0[x] = sr0[-x];
-                }
-            }
-            if (it[i].off + (uint32_t)pw * (uint32_t)ph * 4u > end) {
-                end = it[i].off + (uint32_t)pw * (uint32_t)ph * 4u;
-            }
-        }
-        mi.Flush((void*)ge_flipVirt, end);
-        for (i = 0; i < n; i++) {
-            MI_GFX_Rect_t sr = { it[i].pw - 1 - it[i].sw, it[i].ph - 1 - it[i].sh, it[i].sw, it[i].sh };
-            MI_GFX_Rect_t dr = { PANEL_W - it[i].dx - it[i].dw, PANEL_H - it[i].dy - it[i].dh, (MI_U32)it[i].dw, (MI_U32)it[i].dh };
-            if (ge_blit(ge_flipPhys + it[i].off, it[i].pw, it[i].ph, &sr, page, PANEL_W, PANEL_H, &dr, E_MI_GFX_ROTATE_0, &fence) == 0) {
-                done++;
-            }
-        }
-    } else
     for (i = 0; i < n; i++) {
         MI_GFX_Rect_t sr = { 1, 1, it[i].sw, it[i].sh };
         MI_GFX_Rect_t dr = { it[i].dx, it[i].dy, (MI_U32)it[i].dw, (MI_U32)it[i].dh };
