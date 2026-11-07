@@ -721,7 +721,9 @@ static int scan_ok(const GePrep *r, int x0, int y0, int x1, int y1) {
         ok = 2;
     }
     if (ok == 1 && dynamic_piece(x0, y0, x1, y1, r->key) &&
-        !(gx_ge_mudando && r->sw * r->sh <= (logo_on() ? GE_DYN_LOGO : GE_DYN_MAX))) {
+        !(gx_ge_mudando && r->sa == 255 && r->sw * r->sh <= (logo_on() ? GE_DYN_LOGO : GE_DYN_MAX))) {
+        /* (TESTE do lote 175: peca que muda e e meio transparente pelo alfa primitivo (os botoes C apagados na agua,
+         * refeitos a cada 14 desenhos) fica com os nucleos) */
         ok = 3; /* muda a cada desenho: os nucleos */
     }
     g_need = bake_has(r->key) ? 0u : (uint32_t)(r->sw * r->sh);

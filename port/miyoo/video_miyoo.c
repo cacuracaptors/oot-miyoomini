@@ -709,10 +709,7 @@ static void ge_init(void) {
             if (mi.MmaAlloc(NULL, sizes[k], &ge_phys[i])) {
                 break;
             }
-            /* (TESTE do lote 174: memoria das pecas SEM cache do processador; a tela nao precisa mais limpar o cache
-             * antes de cada imagem. Com hud_changing_on_accelerator 0 (nada era limpo no Lago Hylia) a barra de magia
-             * nao tinha lixo; com 1 (limpeza a cada imagem) tinha) */
-            if (mi.Mmap(ge_phys[i], sizes[k], &v, FALSE)) {
+            if (mi.Mmap(ge_phys[i], sizes[k], &v, TRUE)) {
                 mi.MmaFree(ge_phys[i]);
                 break;
             }
@@ -751,9 +748,9 @@ static void ge_draw(const void* key, int back) {
         return;
     }
     mem = gx_ge_part_mem(part, &lo, &hi);
-    (void)lo; /* (lote 174: sem cache nesta memoria, nada a limpar) */
-    (void)hi;
-    (void)mem;
+    if (hi > lo && mem != NULL) {
+        mi.Flush((void*)(mem + lo), hi - lo); /* (os texels novos estao no cache do processador) */
+    }
     for (i = 0; i < n; i++) {
         MI_GFX_Rect_t sr = { 1, 1, it[i].sw, it[i].sh };
         MI_GFX_Rect_t dr = { it[i].dx, it[i].dy, (MI_U32)it[i].dw, (MI_U32)it[i].dh };
