@@ -152,16 +152,7 @@ typedef struct {
     uint32_t *px;
     int sw, sh;
     uint32_t use, bytes;
-    uint32_t sum; /* (diagnostico do lote 177) soma dos texels quando calculados */
 } GeBake;
-static uint32_t px_sum(const uint32_t *px, uint32_t n) {
-    uint32_t h = 2166136261u, i;
-    for (i = 0; i < n; i++) {
-        h = (h ^ px[i]) * 16777619u;
-    }
-    return h;
-}
-static unsigned g_dbgBake, g_dbgCopy;
 static GeBake g_bake[GE_BAKE_N];
 static uint32_t g_bakeUse = 1, g_bakeBytes;
 
@@ -494,12 +485,6 @@ static GeBake *bake_get(uint64_t key, int sw, int sh, float s0, float t0, int mo
     for (i = 0; i < GE_BAKE_N; i++) {
         if (g_bake[i].px != NULL && g_bake[i].key == key && g_bake[i].sw == sw && g_bake[i].sh == sh) {
             g_bake[i].use = g_bakeUse++;
-            if (g_dbgBake < 40 && px_sum(g_bake[i].px, (uint32_t)sw * (uint32_t)sh) != g_bake[i].sum) {
-                fprintf(stderr, "[2d-bake] texels guardados MUDARAM depois de calculados: %dx%d chave %016llx (lugar %d)\n", sw, sh,
-                        (unsigned long long)key, i);
-                g_dbgBake++;
-                g_bake[i].sum = px_sum(g_bake[i].px, (uint32_t)sw * (uint32_t)sh);
-            }
             return &g_bake[i];
         }
     }
@@ -551,11 +536,6 @@ static GeBake *bake_get(uint64_t key, int sw, int sh, float s0, float t0, int mo
                 row[x] = gx_bake_texel(s0 + ((float)x + 0.5f) * st, T, mode, hk, NULL);
             }
         }
-    }
-    b->sum = px_sum(b->px, (uint32_t)sw * (uint32_t)sh);
-    if (g_dbgBake < 40 && sw == 48 && (sh == 16 || sh == 7)) {
-        fprintf(stderr, "[2d-bake] barra calculada de novo: %dx%d chave %016llx soma %08x\n", sw, sh, (unsigned long long)key, b->sum);
-        g_dbgBake++;
     }
     return b;
 }
@@ -672,6 +652,11 @@ static int prep(GePrep *r, int cyc, float s0, float t0, float swTex, float shTex
     key = mix(key, (uint64_t)r->mode << 40 | (uint64_t)cyc << 32 | (uint64_t)r->hk << 48);
     r->key = key;
     r->ckey = r->sa != 255 ? mix(key, 0xA1FA000000000000ull | (uint64_t)r->sa) : key;
+    /* a copia na memoria do acelerador tambem depende do TAMANHO: a mesma textura do mesmo ponto em larguras diferentes
+     * da a mesma chave (o meio da barra de magia cresce de 8 em 8 texels ao encher). Sem isto, uma copia estreita de um
+     * desenho antigo desta parte passava por "ja esta na memoria" e o MI_GFX a lia com a largura de linha nova: lixo em
+     * faixas inclinadas na barra (sempre depois de carregar um estado sobre a agua) */
+    r->ckey = mix(r->ckey, 0x512E000000000000ull | (uint64_t)(uint32_t)r->sw << 16 | (uint64_t)(uint32_t)r->sh);
     return 1;
 }
 
@@ -832,11 +817,6 @@ static int add_item(const GePrep *r, float s0, float t0, int x0, int y0, int x1,
     }
     if (!copy_same(p, r->ckey, p->used)) {
         uint32_t *dst = (uint32_t *)(p->mem + p->used);
-        if (g_dbgCopy < 300 && x1 <= 200 && y0 >= 56 && y1 <= 120) {
-            fprintf(stderr, "[2d-copia] barra copiada: (%d,%d)-(%d,%d) parte %d lugar %u copia %d texels %08x\n", x0, y0, x1, y1, g_cur,
-                    (unsigned)p->used, p->cn - 1, px_sum(b->px, (uint32_t)sw * (uint32_t)sh));
-            g_dbgCopy++;
-        }
         for (y = 0; y < ph; y++) {
             const uint32_t sy = y == 0 ? 0 : (y > (uint32_t)sh ? (uint32_t)sh - 1u : y - 1u);
             const uint32_t *src = b->px + (size_t)sy * (size_t)sw;
