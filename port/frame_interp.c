@@ -138,6 +138,8 @@ FiDiag port_fi_diag;
 #define OVF(k) (g_overflow = 1, port_fi_diag.ovf[k]++)
 
 int port_fi_enabled = 1; /* opcoes.txt: quadros_extras (0 = desligado) */
+/* options.txt: interpolate_scrolling_textures (0 = texturas que deslizam ficam no valor do quadro real) */
+int port_opt_fi_scroll = 1;
 static int g_fiSkip;  /* > 0: Matrix_MtxFToMtx chamado por dentro de Matrix_ToMtx (ja gravado) */
 
 /* estado do ator (como o SoH) */
@@ -481,7 +483,7 @@ void Port_FiSkinVtx(const void* key, const void* buf, int count) {
 void Port_FiTexScroll(const void* cmd) {
     FiRec* r = g_cur;
     const uint32_t* w = (const uint32_t*)cmd;
-    if (r == NULL || g_fiSkip > 0 || r->nScroll >= FI_MAX_SCROLL) {
+    if (r == NULL || g_fiSkip > 0 || !port_opt_fi_scroll || r->nScroll >= FI_MAX_SCROLL) {
         return;
     }
     r->scroll[r->nScroll].cmd = cmd;
