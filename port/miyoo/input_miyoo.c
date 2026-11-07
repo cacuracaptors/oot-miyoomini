@@ -45,6 +45,16 @@ extern int port_opt_segurar_b, port_text_open, port_text_choice; /* port_options
 void port_options_save(void);     /* port_options.c */
 extern int port_opt_slow_walk; /* port_options.c: R2 segurado = andar devagar */
 static int port_input_slow;    /* R2 segurado agora (slow_walk) */
+/* andar devagar: o jogo tira 7 de cada eixo (zona morta do PadUtils_UpdateRelXY) e so anda com a forca (raiz de
+ * x^2+y^2 dos eixos ja descontados) acima de 20. SLOW_REL e essa forca ja descontada; slow_axis devolve o valor cru
+ * do eixo que da a componente pedida depois do desconto (assim as diagonais tambem andam). */
+#define SLOW_REL 36.0f
+static signed char slow_axis(float c) {
+    if (c > -0.5f && c < 0.5f) {
+        return 0;
+    }
+    return (signed char)(c > 0 ? lrintf(c) + 7 : lrintf(c) - 7);
+}
 extern int port_opt_manual_jump, port_opt_jump_on_b, port_input_jump, port_input_frames, port_jump_stamp, port_jump_mode;
 
 enum { K_UP, K_DOWN, K_LEFT, K_RIGHT, K_A, K_B, K_X, K_Y, K_L1, K_R1, K_L2, K_R2, K_START, K_SELECT, K_MENU, K_COUNT };
@@ -507,16 +517,19 @@ static void read_pads(OSContPad pads[4]) {
                 ang += fabsf(d) <= step ? d : (d > 0 ? step : -step);
             }
             moving = 1;
-            {
-                const float f = port_input_slow ? 28.0f : 76.0f; /* (R2 segurado: andar devagar) */
-                pads[0].stick_x = (s8)lrintf(f * cosf(ang));
-                pads[0].stick_y = (s8)lrintf(f * sinf(ang));
+            if (port_input_slow) { /* R2 segurado: andar devagar */
+                pads[0].stick_x = slow_axis(SLOW_REL * cosf(ang));
+                pads[0].stick_y = slow_axis(SLOW_REL * sinf(ang));
+            } else {
+                pads[0].stick_x = (s8)lrintf(76.0f * cosf(ang));
+                pads[0].stick_y = (s8)lrintf(76.0f * sinf(ang));
             }
         }
         last = now;
     } else if (port_input_slow && !held[K_SELECT]) { /* R2 segurado: andar devagar (analogico pouco inclinado) */
-        pads[0].stick_x = (s8)(dx * (dy ? 20 : 28));
-        pads[0].stick_y = (s8)(dy * (dx ? 20 : 28));
+        const float k = (dx && dy) ? SLOW_REL * 0.70710678f : SLOW_REL;
+        pads[0].stick_x = slow_axis(k * (float)dx);
+        pads[0].stick_y = slow_axis(k * (float)dy);
     } else if (dx && dy) { /* diagonal: mesma forca que uma direcao so */
         pads[0].stick_x = (s8)(dx * 54);
         pads[0].stick_y = (s8)(dy * 54);
