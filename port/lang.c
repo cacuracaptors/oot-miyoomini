@@ -18,7 +18,8 @@
 
 #include "os_hw.h"
 
-int port_opt_idioma = 0; /* 0 = original (ingles), 1 = portugues do Brasil, 2 = japones, 3 = alemao, 4 = frances */
+int port_opt_idioma = 0; /* 0 = original (ingles), 1 = portugues do Brasil, 2 = japones, 3 = alemao, 4 = frances,
+                          * 5 = italiano */
 
 extern char _dmadataSegmentRomStart[];
 extern char _dmadataSegmentRomEnd[];
@@ -289,12 +290,12 @@ static int lang_load(const char* path) {
 }
 
 /* Chamar depois de abrir o cartucho e de ler o opcoes.txt. */
-int port_lang_game; /* o idioma desta execucao (0 ingles, 1 portugues, 2 japones, 3 alemao, 4 frances): z_common_data.c,
+int port_lang_game; /* o idioma desta execucao (0 ingles, 1 portugues, 2 japones, 3 alemao, 4 frances, 5 italiano): z_common_data.c,
                      * graph.c (so o japones muda gSaveContext.language; os outros usam as posicoes do ingles) */
 
 void port_lang_init(void) {
-    static const char* const k_files[] = { NULL, "idiomas/pt.oot", NULL, "idiomas/de.oot", "idiomas/fr.oot" };
-    port_lang_game = port_opt_idioma >= 0 && port_opt_idioma <= 4 ? port_opt_idioma : 0;
+    static const char* const k_files[] = { NULL, "idiomas/pt.oot", NULL, "idiomas/de.oot", "idiomas/fr.oot", "idiomas/it.oot" };
+    port_lang_game = port_opt_idioma >= 0 && port_opt_idioma <= 5 ? port_opt_idioma : 0;
     if (port_opt_idioma <= 0 || port_opt_idioma >= (int)(sizeof k_files / sizeof k_files[0]) ||
         k_files[port_opt_idioma] == NULL) {
         return;

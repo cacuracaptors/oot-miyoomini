@@ -62,7 +62,7 @@ typedef struct {
 #define RR(tab, name, en, pt, mn, mx, st) { tab, name, en, pt, mn, mx, st, 1 }
 
 static const Item k_items[] = {
-    RR(TAB_GENERAL, "language", "Language (restarts the game)", "Idioma (reinicia o jogo)", 0, 4, 1),
+    RR(TAB_GENERAL, "language", "Language (restarts the game)", "Idioma (reinicia o jogo)", 0, 5, 1),
     RR(TAB_GENERAL, "cpu_clock", "CPU clock (MHz, restarts)", "Clock da CPU (MHz, reinicia)", 1200, 1800, 100),
     R(TAB_GENERAL, "autosave", "Autosave (minutes)", "Salvar sozinho (minutos)", 0, 30, 1),
     R(TAB_GENERAL, "menu_theme", "Menu colors", "Cores do menu", 0, 1, 1),
@@ -235,15 +235,15 @@ static const char* const k_tabPt[TAB_COUNT] = { "Salvar", "Carregar", "Geral", "
 
 static volatile int g_dirty; /* o menu precisa ser redesenhado */
 
-/* ---- idioma do menu: o da opcao language (0 ingles, 1 portugues, 2 japones, 3 alemao, 4 frances) ---- */
+/* ---- idioma do menu: o da opcao language (0 ingles, 1 portugues, 2 japones, 3 alemao, 4 frances, 5 italiano) ---- */
 static int lang(void) {
-    return port_opt_idioma >= 1 && port_opt_idioma <= 4 ? port_opt_idioma : 0;
+    return port_opt_idioma >= 1 && port_opt_idioma <= 5 ? port_opt_idioma : 0;
 }
 
-/* alemao (lg 3) ou frances (lg 4) de um texto fixo (pela chave em ingles); NULL = nao ha */
+/* alemao (lg 3), frances (lg 4) ou italiano (lg 5) de um texto fixo (pela chave em ingles); NULL = nao ha */
 const char* miyoo_menu_eu(const char* en, int lg) {
     int i;
-    if (lg != 3 && lg != 4) {
+    if (lg < 3 || lg > 5) {
         return NULL;
     }
     for (i = 0; i < (int)(sizeof k_ui_eu / sizeof k_ui_eu[0]); i++) {
@@ -303,7 +303,7 @@ static const char* item_label(const Item* it) {
             return tr(it->en, it->pt);
         }
         t = texto(it->name);
-        l = t == NULL ? NULL : (lang() == 3 ? t->de : t->fr);
+        l = t == NULL ? NULL : (lang() == 3 ? t->de : lang() == 4 ? t->fr : t->it);
         return l != NULL && l[0] != 0 ? l : it->en;
     }
     return lang() == 1 ? it->pt : it->en;
@@ -313,7 +313,7 @@ static const char* item_help(const Item* it) {
     const MenuTexto* t = texto(it->name);
     int i;
     if (lang() >= 3 && t != NULL) {
-        const char* h = lang() == 3 ? t->de_help : t->fr_help;
+        const char* h = lang() == 3 ? t->de_help : lang() == 4 ? t->fr_help : t->it_help;
         if (h[0] != 0) {
             return h;
         }
@@ -637,9 +637,11 @@ static void change(const Item* it, int dir) {
             } else if (x > it->max) {
                 x = dir > 0 && from < it->max ? it->max : (dir > 0 ? it->min : it->max);
             }
-            /* alemao e frances so existem depois de o jogo tirar da ROM europeia (port/lang_pal.c) */
+            /* alemao e frances so existem depois de o jogo tirar da ROM europeia (port/lang_pal.c); italiano so com o
+             * idiomas/it.oot */
         } while (!strcmp(it->name, "language") && ((x == 3 && access("idiomas/de.oot", R_OK) != 0) ||
-                                                    (x == 4 && access("idiomas/fr.oot", R_OK) != 0)) &&
+                                                    (x == 4 && access("idiomas/fr.oot", R_OK) != 0) ||
+                                                    (x == 5 && access("idiomas/it.oot", R_OK) != 0)) &&
                  ++tries < 6);
     }
     if (x != *v) {
@@ -1190,6 +1192,7 @@ static const char* choice_name(const char* opt, int v) {
                    : lang() == 1 ? k_choices[i].pt[v]
                    : lang() == 3 ? k_choices[i].de[v]
                    : lang() == 4 ? k_choices[i].fr[v]
+                   : lang() == 5 ? k_choices[i].it[v]
                                  : k_choices[i].en[v];
         }
     }
@@ -1381,9 +1384,9 @@ static int draw_value(const Item* it, int y, int isSel) {
     }
     nm = !strcmp(it->name, "language") ? NULL : choice_name(it->name, v);
     if (!strcmp(it->name, "language")) {
-        static const char* const en[5] = { "English", "Portuguese", "Japanese", "German", "French" };
-        static const char* const pt[5] = { "Inglês", "Português", "Japonês", "Alemão", "Francês" };
-        const int k = v < 0 || v > 4 ? 0 : v;
+        static const char* const en[6] = { "English", "Portuguese", "Japanese", "German", "French", "Italian" };
+        static const char* const pt[6] = { "Inglês", "Português", "Japonês", "Alemão", "Francês", "Italiano" };
+        const int k = v < 0 || v > 5 ? 0 : v;
         nm = lang() == 1 ? pt[k] : tr(en[k], en[k]);
     }
     if (nm != NULL) {

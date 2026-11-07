@@ -7,9 +7,9 @@
 
 EU = {
 "language": ("Sprache (Neustart)",
-    "Sprache des Spiels und dieses Menüs: Englisch (Original), brasilianisches Portugiesisch (Fanübersetzung Zelda 64 BR), Japanisch (der japanische Originaltext, der auch im US-Modul steckt), Deutsch oder Französisch (diese beiden stammen aus dem europäischen ROM: das ROM \"(Europe) (En,Fr,De) (Rev A)\", auch als .zip, einmal in den Spielordner legen). Zum Wechseln startet das Spiel neu.",
+    "Sprache des Spiels und dieses Menüs: Englisch (Original), brasilianisches Portugiesisch (Fanübersetzung Zelda 64 BR), Japanisch (der japanische Originaltext, der auch im US-Modul steckt), Deutsch oder Französisch (diese beiden stammen aus dem europäischen ROM: das ROM \"(Europe) (En,Fr,De) (Rev A)\", auch als .zip, einmal in den Spielordner legen) oder Italienisch (Fanübersetzung Zelda 64 ITA von XXcentury). Zum Wechseln startet das Spiel neu.",
     "Langue (redémarre)",
-    "Langue du jeu et de ce menu : anglais (original), portugais du Brésil (traduction de fans Zelda 64 BR), japonais (le texte japonais d'origine, présent aussi dans la cartouche américaine), allemand ou français (ces deux-là viennent de la ROM européenne : mettez une fois la ROM \"(Europe) (En,Fr,De) (Rev A)\", même en .zip, dans le dossier du jeu). Le jeu redémarre pour changer."),
+    "Langue du jeu et de ce menu : anglais (original), portugais du Brésil (traduction de fans Zelda 64 BR), japonais (le texte japonais d'origine, présent aussi dans la cartouche américaine), allemand ou français (ces deux-là viennent de la ROM européenne : mettez une fois la ROM \"(Europe) (En,Fr,De) (Rev A)\", même en .zip, dans le dossier du jeu) ou italien (traduction de fans Zelda 64 ITA de XXcentury). Le jeu redémarre pour changer."),
 "cpu_clock": ("CPU-Takt (MHz, Neustart)",
     "Geschwindigkeit des Prozessors. Höher macht das Spiel flüssiger, aber das Gerät wird wärmer und der Akku hält kürzer. Standard: 1800 beim Miyoo Mini Plus und 1600 bei den anderen (Mini, Mini v4, Mini Flip), die nicht mehr vertragen. 1200 ist der Systemwert. Zum Wechseln startet das Spiel neu.",
     "Fréquence CPU (MHz, redémarre)",
@@ -679,7 +679,7 @@ UI_EU = {
                                                        "Séparés de l'état rapide (MENU+R2 / MENU+L2)."),
 # idiomas
 "English": ("Englisch", "Anglais"), "Portuguese": ("Portugiesisch", "Portugais"), "Japanese": ("Japanisch", "Japonais"),
-"German": ("Deutsch", "Allemand"), "French": ("Französisch", "Français"),
+"German": ("Deutsch", "Allemand"), "French": ("Französisch", "Français"), "Italian": ("Italienisch", "Italien"),
 # avisos (port/savestate.c)
 "Game autosaved": ("Automatisch gespeichert", "Partie sauvegardée"),
 "Quick save only during gameplay": ("Schnellstand nur im Spiel", "État rapide seulement en jeu"),

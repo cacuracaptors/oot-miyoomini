@@ -52,7 +52,8 @@ from your European ROM.
   Zelda 64 BR fan translation by Hyllian, Odin, Fserve and Solid_One, with translated graphics)
 - German and French, taken from your own European ROM: put it in the game folder (zipped or not) and the game
   extracts them once - all the text, the item and place names, the area and boss title cards and the pause menu
-- The in-game options menu follows the chosen language (all five)
+- Italian (the Zelda 64 ITA fan translation by XXcentury, v1.00 from 2001; accents restored, all the text)
+- The in-game options menu follows the chosen language (all six)
 
 ### In-game options menu (Menu+Start)
 
@@ -199,6 +200,7 @@ This port cross-compiles for ARMv7 hard-float on Windows + WSL2, with the
   cheats follow its code)
 - Zelda 64 BR (Brazilian Portuguese translation, v1.8) by Hyllian, Odin, Fserve and Solid_One, with graphics from
   Patcher64+
+- Zelda 64 ITA (Italian translation, v1.00, 2001) by XXcentury
 - Audio microcode in C based on mupen64plus's HLE
 - Miyoo Mini toolchain by Shaun Inman - https://github.com/shauninman/union-miyoomini-toolchain
 - Options menu font: DejaVu Sans - https://dejavu-fonts.github.io

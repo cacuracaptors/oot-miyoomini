@@ -81,9 +81,10 @@ FEATURES
 - Manual jump button, mid-air steering, smooth D-pad turning, natural and
   smooth aiming, sprint (keep holding A after a roll), ocarina on the
   D-pad, real vibration, tunic/boots switching without the pause menu
-- English, Japanese, Brazilian Portuguese (the Zelda 64 BR fan translation)
-  and, from your European ROM, German and French
-- In-game options menu (Menu+Start) in all five languages, with 10 save
+- English, Japanese, Brazilian Portuguese (the Zelda 64 BR fan translation),
+  Italian (the Zelda 64 ITA fan translation) and, from your European ROM,
+  German and French
+- In-game options menu (Menu+Start) in all six languages, with 10 save
   state slots with pictures
 - Many optional enhancements from Ship of Harkinian (off by default), fixes
   (on by default) and cheats (off by default); see the README on GitHub
@@ -113,6 +114,7 @@ CREDITS
   follow its code) - https://github.com/HarbourMasters/Shipwright
 - Zelda 64 BR (Brazilian Portuguese translation, v1.8) by Hyllian, Odin,
   Fserve and Solid_One, with graphics from Patcher64+
+- Zelda 64 ITA (Italian translation, v1.00, 2001) by XXcentury
 - Audio microcode in C based on mupen64plus's HLE
 - Miyoo Mini toolchain by Shaun Inman
 - Options menu font: DejaVu Sans

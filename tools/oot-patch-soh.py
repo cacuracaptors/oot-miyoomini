@@ -96,6 +96,7 @@ static s32 Port_MsgMarketSneak(PlayState* play, u16 textId, u8* buf, s32 cap) {
     static const u8 pt[] = { 0x45, 0x6E, 0x74, 0x65, 0x64, 0x69, 0x61, 0x64, 0x6F, 0x2C, 0x20, 0x67, 0x61, 0x72, 0x6F, 0x74, 0x6F, 0x3F, 0x01, 0x51, 0x75, 0x65, 0x72, 0x20, 0x64, 0x61, 0x72, 0x20, 0x75, 0x6D, 0x61, 0x20, 0x76, 0x6F, 0x6C, 0x74, 0x61, 0x3F, 0x01, 0x1B, 0x05, 0x42, 0x53, 0x69, 0x6D, 0x2C, 0x20, 0x76, 0x61, 0x6D, 0x6F, 0x73, 0x01, 0x46, 0x69, 0x63, 0x6F, 0x20, 0x70, 0x6F, 0x72, 0x20, 0x61, 0x71, 0x75, 0x69, 0x05, 0x40, 0x02 };
     static const u8 de[] = { 0x44, 0x75, 0x20, 0x73, 0x69, 0x65, 0x68, 0x73, 0x74, 0x20, 0x67, 0x65, 0x6C, 0x61, 0x6E, 0x67, 0x77, 0x65, 0x69, 0x6C, 0x74, 0x20, 0x61, 0x75, 0x73, 0x2E, 0x01, 0x4C, 0x75, 0x73, 0x74, 0x20, 0x61, 0x75, 0x66, 0x20, 0x65, 0x69, 0x6E, 0x65, 0x6E, 0x20, 0x53, 0x70, 0x61, 0x7A, 0x69, 0x65, 0x72, 0x67, 0x61, 0x6E, 0x67, 0x3F, 0x01, 0x1B, 0x05, 0x42, 0x4A, 0x61, 0x01, 0x4E, 0x65, 0x69, 0x6E, 0x05, 0x40, 0x02 };
     static const u8 fr[] = { 0x54, 0x75, 0x20, 0x61, 0x73, 0x20, 0x6C, 0x27, 0x61, 0x69, 0x72, 0x20, 0x64, 0x65, 0x20, 0x74, 0x27, 0x65, 0x6E, 0x6E, 0x75, 0x79, 0x65, 0x72, 0x2E, 0x01, 0x54, 0x75, 0x20, 0x76, 0x65, 0x75, 0x78, 0x20, 0x61, 0x6C, 0x6C, 0x65, 0x72, 0x20, 0x66, 0x61, 0x69, 0x72, 0x65, 0x20, 0x75, 0x6E, 0x20, 0x74, 0x6F, 0x75, 0x72, 0x3F, 0x01, 0x1B, 0x05, 0x42, 0x4F, 0x75, 0x69, 0x01, 0x4E, 0x6F, 0x6E, 0x05, 0x40, 0x02 };
+    static const u8 it[] = { 0x53, 0x65, 0x6D, 0x62, 0x72, 0x69, 0x20, 0x61, 0x6E, 0x6E, 0x6F, 0x69, 0x61, 0x74, 0x6F, 0x2E, 0x01, 0x56, 0x75, 0x6F, 0x69, 0x20, 0x66, 0x61, 0x72, 0x65, 0x20, 0x75, 0x6E, 0x20, 0x67, 0x69, 0x72, 0x6F, 0x3F, 0x01, 0x1B, 0x05, 0x42, 0x53, 0x99, 0x01, 0x4E, 0x6F, 0x05, 0x40, 0x02 };
     static const u16 jp[] = { 0x82D0, 0x82DC, 0x82BB, 0x82A4, 0x82BE, 0x82C8, 0x8140, 0x82B3, 0x82F1, 0x82DB, 0x82C9, 0x8140, 0x82A2, 0x82AD, 0x82A9, 0x8148, 0x000A, 0x81BC, 0x000B, 0x0C02, 0x82A4, 0x82F1, 0x000A, 0x82E2, 0x82DF, 0x82C6, 0x82AD, 0x000B, 0x0C00, 0x8170 };
     MessageContext* msgCtx = &play->msgCtx;
     s32 i;
@@ -114,9 +115,10 @@ static s32 Port_MsgMarketSneak(PlayState* play, u16 textId, u8* buf, s32 cap) {
         msgCtx->msgLength = sizeof(jp);
     } else {
         extern int port_opt_idioma;
-        const u8* s = port_opt_idioma == 1 ? pt : port_opt_idioma == 3 ? de : port_opt_idioma == 4 ? fr : en;
+        const u8* s = port_opt_idioma == 1 ? pt : port_opt_idioma == 3 ? de : port_opt_idioma == 4 ? fr
+                    : port_opt_idioma == 5 ? it : en;
         s32 n = port_opt_idioma == 1 ? (s32)sizeof(pt) : port_opt_idioma == 3 ? (s32)sizeof(de)
-              : port_opt_idioma == 4 ? (s32)sizeof(fr) : (s32)sizeof(en);
+              : port_opt_idioma == 4 ? (s32)sizeof(fr) : port_opt_idioma == 5 ? (s32)sizeof(it) : (s32)sizeof(en);
         if (n > cap) {
             return 0;
         }
@@ -175,13 +177,14 @@ static void Port_MsgInject(PlayState* play, u16 textId, u8* buf, s32 cap) {
         static const char enQ[] = "Do you want to quit?";
         static const char deQ[] = "Willst Du aufh\x9Bren?";
         static const char frQ[] = "Tu veux arr\x97ter de p\x97" "cher?";
-        static const char* const yes[5] = { "Yes", "Sim", "Yes", "Ja", "Oui" };
-        static const char* const no[5] = { "No", "N\x93o", "No", "Nein", "Non" };
+        static const char itQ[] = "Vuoi smettere di pescare?";
+        static const char* const yes[6] = { "Yes", "Sim", "Yes", "Ja", "Oui", "S\x99" }; /* (0x99: i com acento grave no pacote italiano) */
+        static const char* const no[6] = { "No", "N\x93o", "No", "Nein", "Non", "No" };
         const int lg = ({ extern int port_opt_idioma; port_opt_idioma; }) >= 0 &&
-                               ({ extern int port_opt_idioma; port_opt_idioma; }) <= 4
+                               ({ extern int port_opt_idioma; port_opt_idioma; }) <= 5
                            ? ({ extern int port_opt_idioma; port_opt_idioma; })
                            : 0;
-        const char* q = lg == 1 ? ptQ : lg == 3 ? deQ : lg == 4 ? frQ : enQ;
+        const char* q = lg == 1 ? ptQ : lg == 3 ? deQ : lg == 4 ? frQ : lg == 5 ? itQ : enQ;
         end = Port_MsgEnd(buf, msgCtx->msgLength, &lines);
         if (end < 0) {
             return;
@@ -3223,6 +3226,7 @@ static void Port_MsgAskEquip(PlayState* play, u16 textId, u8* buf, s32 cap) {
     static const u8 pt[] = { @@PT@@ };
     static const u8 de[] = { @@DE@@ };
     static const u8 fr[] = { @@FR@@ };
+    static const u8 it[] = { @@IT@@ };
     static const u16 jp[] = { @@JP@@ };
     MessageContext* msgCtx = &play->msgCtx;
     s32 adult = LINK_IS_ADULT, i, end, lines, n;
@@ -3249,9 +3253,10 @@ static void Port_MsgAskEquip(PlayState* play, u16 textId, u8* buf, s32 cap) {
         msgCtx->msgLength += sizeof(jp);
     } else {
         extern int port_opt_idioma;
-        const u8* s = port_opt_idioma == 1 ? pt : port_opt_idioma == 3 ? de : port_opt_idioma == 4 ? fr : en;
+        const u8* s = port_opt_idioma == 1 ? pt : port_opt_idioma == 3 ? de : port_opt_idioma == 4 ? fr
+                    : port_opt_idioma == 5 ? it : en;
         n = port_opt_idioma == 1 ? (s32)sizeof(pt) : port_opt_idioma == 3 ? (s32)sizeof(de)
-          : port_opt_idioma == 4 ? (s32)sizeof(fr) : (s32)sizeof(en);
+          : port_opt_idioma == 4 ? (s32)sizeof(fr) : port_opt_idioma == 5 ? (s32)sizeof(it) : (s32)sizeof(en);
         end = Port_MsgEnd(buf, msgCtx->msgLength, &lines);
         if (end < 0 || msgCtx->msgLength + n > cap) {
             return;
@@ -3279,6 +3284,7 @@ PORT_ASKEQ = PORT_ASKEQ.replace("@@EN@@", _nesb("Would you like to equip it now?
                        .replace("@@PT@@", _nesb("Quer equipar agora?", "Sim", "Nao")) \
                        .replace("@@DE@@", _nesb("Jetzt ausr\u00fcsten?", "Ja", "Nein")) \
                        .replace("@@FR@@", _nesb("L'\u00e9quiper maintenant?", "Oui", "Non")) \
+                       .replace("@@IT@@", _nesb("Vuoi equipaggiarlo ora?", "S\u00ef", "No")) \
                        .replace("@@JP@@", ", ".join("0x%04X" % x for x in _jpq))
 patch_file("src/code/z_message.c", [
     ("SoH AskToEquip: mensagem",
