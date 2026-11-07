@@ -804,7 +804,9 @@ static int add_item(const GePrep *r, float s0, float t0, int x0, int y0, int x1,
         return 0;
     }
     /* copia com borda de 1 texel repetindo a beirada (a suavizacao nas beiradas nao le vizinho) */
-    pw = ((uint32_t)sw + 2u + 3u) & ~3u;
+    /* (TESTE do lote 171: largura da linha em multiplos de 16 pixels (64 bytes), em vez de 4; a barra de magia, com
+     * 52, saia com lixo no MI_GFX de vez em quando) */
+    pw = ((uint32_t)sw + 2u + 15u) & ~15u;
     ph = (uint32_t)sh + 2u;
     bytes = (pw * ph * 4u + 63u) & ~63u;
     if (p->used + bytes > p->cap) {

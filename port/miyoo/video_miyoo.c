@@ -753,9 +753,6 @@ static void ge_draw(const void* key, int back) {
     }
     for (i = 0; i < n; i++) {
         MI_GFX_Rect_t sr = { 1, 1, it[i].sw, it[i].sh };
-        if (it[i].dy >= 60 && it[i].dy < 90 && it[i].dx < 200) {
-            continue; /* (TESTE do lote 170: a barra de magia NAO e desenhada pelo acelerador; o que aparece ali e a imagem por baixo) */
-        }
         MI_GFX_Rect_t dr = { it[i].dx, it[i].dy, (MI_U32)it[i].dw, (MI_U32)it[i].dh };
         if (!ge_place) { /* (a tela e de cabeca para baixo: o lugar girado aqui) */
             dr.s32Xpos = PANEL_W - it[i].dx - it[i].dw;
