@@ -127,7 +127,7 @@ typedef struct {
     int n;
     uint32_t used, cap;
     uint8_t *mem;
-    uint32_t dlo, dhi; /* o que foi escrito desde a ultima vez que a tela limpou o cache desta parte */
+    uint32_t dlo, dhi; /* o que foi escrito neste desenho (a tela limpa o cache disso) */
     /* o que esta na memoria: as pecas deste desenho (c) e do anterior nesta parte (p) */
     /* as copias feitas (uma por peca do jogo, mesmo as emendadas): chave e lugar, deste desenho (c) e do
      * anterior nesta parte (p). A mesma copia no mesmo lugar: ja esta na memoria */
@@ -390,11 +390,8 @@ void gx_ge_scan_end(int abort) {
         p->cn = 0;
         p->n = 0;
         p->used = 0;
-        /* (dlo/dhi NAO voltam a zero aqui: acumulam ate a tela limpar o cache (gx_ge_part_mem). Um desenho que nao
-         * chega a ser mostrado (imagem intermediaria descartada) deixava os texels novos so no cache do processador;
-         * 8 desenhos depois, a mesma copia no mesmo lugar nao era escrita de novo (copy_same) e a faixa limpa nao a
-         * incluia: o acelerador lia da memoria o que havia antes (pedacos de outras pecas: a barra de magia com
-         * coracoes e numeros dentro, piscando no Lago Hylia) ate o cache devolver os bytes por conta propria) */
+        p->dlo = 0xFFFFFFFFu;
+        p->dhi = 0;
     }
 }
 
@@ -1649,12 +1646,9 @@ int gx_ge_items(const void *key, const GxGeItem **items, int *part) {
 }
 
 /* memoria da parte e o trecho escrito no ultimo desenho dela ([lo, hi); lo >= hi: nada novo) */
-/* (a faixa e entregue uma vez: quem chama limpa o cache dela, e a parte volta a acumular do zero) */
 const uint8_t *gx_ge_part_mem(int part, uint32_t *lo, uint32_t *hi) {
     *lo = g_part[part].dlo;
     *hi = g_part[part].dhi;
-    g_part[part].dlo = 0xFFFFFFFFu;
-    g_part[part].dhi = 0;
     return g_part[part].mem;
 }
 
