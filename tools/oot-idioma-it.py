@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """oot-idioma-it.py: gera o pacote de idioma italiano do port (idiomas/it.oot).
 
-uso: python3 oot-idioma-it.py ROM_1.1(.z64/.n64/.v64)  ROM_1.0(.z64/.n64/.v64)  ZELDAITA.IPS  SAIDA.oot
+uso: python3 oot-idioma-it.py ROM_1.1  ROM_1.0  ZELDAITA.IPS  SAIDA.oot  [it.ppf]
+     (ROMs .z64/.n64/.v64 ou .zip; it.ppf = Files/Games/Ocarina of Time/Languages/it.ppf do Patcher64+)
 
 Traducao: "Zelda 64 ITA" v1.00 (2001), de XXcentury (patch IPS para a ROM USA 1.0). O patch so muda o
 texto do jogo (nes_message_data_static) e os creditos (staff_message_data_static); a tabela de
@@ -16,6 +17,11 @@ O que este script faz, alem de aplicar o patch (so na memoria):
     trema (0x9B), que o italiano nao usa, sao redesenhados como "i" e "o" com o acento grave do "e" (0x95)
     so dentro deste pacote (trechos do arquivo da fonte).
 Os creditos ficam como no patch (o nome do tradutor no lugar dos tradutores ingleses).
+
+Graficos (opcional, it.ppf do Patcher64+, "Rulesless, xxcentury & Brisma (traducao), GhostlyDark (port e
+melhorias)"): o PPF vale para a ROM 1.0 descomprimida (cada arquivo no seu endereco virtual). O texto dele e
+igual ao do IPS; dele vem so o que nao e texto: rotulos do HUD e do menu de pausa, nomes dos itens, dos lugares
+(mapa e ao entrar), dos chefes e a tela de titulo.
 """
 import struct
 import sys
@@ -89,6 +95,44 @@ def load_z64(p):
         x[0::4], x[1::4], x[2::4], x[3::4] = d[3::4], d[2::4], d[1::4], d[0::4]
         d = bytes(x)
     return d
+
+
+def apply_ppf_files(rom10, files10, ppf):
+    """PPF3 sobre a ROM 1.0 descomprimida: as copias dos arquivos que ele muda {indice: bytes}"""
+    assert ppf[:5] == b'PPF30', 'nao e um PPF 3.0'
+    assert ppf[57] == 0 and ppf[58] == 0, 'PPF com bloco de conferencia/desfazer: nao previsto'
+    off = rom10.find(struct.pack('>IIII', 0, 0x1060, 0, 0))
+    ents = []
+    i = off
+    while True:
+        vs, ve, ps, pe = struct.unpack('>IIII', rom10[i:i + 16])
+        i += 16
+        if vs == 0 and ve == 0 and ents:
+            break
+        ents.append((vs, ve))
+    starts = sorted((vs, k) for k, (vs, ve) in enumerate(ents) if files10[k] is not None)
+    import bisect
+    keys = [v for v, _ in starts]
+    out = {}
+    i = 60
+    while i < len(ppf) and ppf[i:i + 4] != b'@BEG':
+        pos = int.from_bytes(ppf[i:i + 8], 'little')
+        n = ppf[i + 8]
+        data = ppf[i + 9:i + 9 + n]
+        i += 9 + n
+        for j in range(n):
+            a = pos + j
+            t = bisect.bisect_right(keys, a) - 1
+            if t < 0:
+                continue
+            k = starts[t][1]
+            vs, ve = ents[k]
+            if a >= ve:
+                continue  # (fora dos arquivos: cabecalho, dmadata)
+            if k not in out:
+                out[k] = bytearray(files10[k])
+            out[k][a - vs] = data[j]
+    return {k: bytes(v) for k, v in out.items() if v != files10[k]}
 
 
 def apply_ips(rom, ips):
@@ -281,6 +325,7 @@ def ranges(x, y, gap=16):
 
 def main():
     ROM11, ROM10, IPS, OUT = sys.argv[1:5]
+    PPF = sys.argv[5] if len(sys.argv) > 5 else None
     a = load_z64(ROM11)
     assert a[0x3B:0x40] == b'CZLE\x01', 'a primeira ROM tem de ser a USA 1.1 (Rev A)'
     r10 = load_z64(ROM10)
@@ -301,14 +346,24 @@ def main():
     for k in range(len(fb)):
         if k not in (22, STAFF) and fb[k] != f10[k]:
             sys.exit('o patch muda o arquivo %d, que este script nao conhece' % k)
-
+    if PPF:
+        gfx = apply_ppf_files(r10, f10, open(PPF, 'rb').read())
+        assert gfx.get(22, fb[22]) == fb[22], 'o texto do PPF nao e o do IPS'
+        for k in sorted(gfx):
+            if k in (22, 27, FONT, STAFF):
+                continue
+            if len(gfx[k]) != len(fa[k]):
+                sys.exit('arquivo %d com outro tamanho na 1.1' % k)
+            data.append((k, gfx[k]))
+        print('graficos do PPF:', len(data) - 2, 'arquivos')
     table, blob, stats = build_text(fb[27], fb[22])
     used = set(blob)
     assert I_GRAVE in used and O_GRAVE in used
 
     out = bytearray(b'OOTLNG1\0' + struct.pack('<I', 1))
     out += b'Italiano'.ljust(32, b'\0')
-    out += 'Zelda 64 ITA v1.00 (2001): XXcentury'.encode().ljust(224, b'\0')[:224]
+    out += ('Zelda 64 ITA v1.00 (2001): XXcentury' + ('; graficos: Patcher64+ (Rulesless, Brisma, GhostlyDark)' if PPF else '')
+            ).encode().ljust(224, b'\0')[:224]
     out += struct.pack('<I', len(data))
     tot = 0
     for k, y in data:

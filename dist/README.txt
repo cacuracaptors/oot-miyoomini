@@ -114,7 +114,8 @@ CREDITS
   follow its code) - https://github.com/HarbourMasters/Shipwright
 - Zelda 64 BR (Brazilian Portuguese translation, v1.8) by Hyllian, Odin,
   Fserve and Solid_One, with graphics from Patcher64+
-- Zelda 64 ITA (Italian translation, v1.00, 2001) by XXcentury
+- Zelda 64 ITA (Italian translation, v1.00, 2001) by XXcentury, with
+  Rulesless and Brisma; graphics from Patcher64+ (GhostlyDark)
 - Audio microcode in C based on mupen64plus's HLE
 - Miyoo Mini toolchain by Shaun Inman
 - Options menu font: DejaVu Sans
