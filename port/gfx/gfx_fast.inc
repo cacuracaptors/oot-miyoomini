@@ -959,6 +959,25 @@ static void fast_build(void) {
         }
     }
     fused_check(f);
+#ifdef GX_REPLAY_DIAG
+    if (getenv("BGDBG")) {
+        /* (diagnostico) como cada estado novo e desenhado: uma linha por textura+modo */
+        static uint32_t seen[64][2];
+        static int nseen;
+        int k, dup = 0;
+        for (k = 0; k < nseen; k++) {
+            if (seen[k][0] == gx.timgRaw && seen[k][1] == gx.omL) dup = 1;
+        }
+        if (!dup && nseen < 64) {
+            seen[nseen][0] = gx.timgRaw;
+            seen[nseen++][1] = gx.omL;
+            fprintf(stderr, "[prog] tex %08x omL %08x: fused %d kern %d fblm %d cyc2 %d bilerp %d needMem %d crop %d | t0 %dx%d modo %d/%d pfs %d | t1 %d %dx%d modo %d/%d pfs %d\n",
+                    gx.timgRaw, gx.omL, f->fused, f->kern, f->fblm, f->cyc2, f->bilerp, f->needMem, f->crop,
+                    f->t[0].w, f->t[0].h, f->t[0].modeS, f->t[0].modeT, f->t[0].pfs,
+                    f->useT[1], f->t[1].w, f->t[1].h, f->t[1].modeS, f->t[1].modeT, f->t[1].pfs);
+        }
+    }
+#endif
 }
 
 /* ------------------------------------------------------------------ lacos sobre vetores de pixels */
