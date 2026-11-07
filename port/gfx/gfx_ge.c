@@ -127,7 +127,7 @@ typedef struct {
     int n;
     uint32_t used, cap;
     uint8_t *mem;
-    uint32_t dlo, dhi; /* o que foi escrito neste desenho (a tela limpa o cache disso) */
+    uint32_t dlo, dhi; /* o que foi escrito desde a ultima vez que a tela limpou o cache desta parte */
     /* o que esta na memoria: as pecas deste desenho (c) e do anterior nesta parte (p) */
     /* as copias feitas (uma por peca do jogo, mesmo as emendadas): chave e lugar, deste desenho (c) e do
      * anterior nesta parte (p). A mesma copia no mesmo lugar: ja esta na memoria */
@@ -390,8 +390,11 @@ void gx_ge_scan_end(int abort) {
         p->cn = 0;
         p->n = 0;
         p->used = 0;
-        p->dlo = 0xFFFFFFFFu;
-        p->dhi = 0;
+        /* (dlo/dhi NAO voltam a zero aqui: acumulam ate a tela limpar o cache (gx_ge_part_mem). Um desenho que nao
+         * chega a ser mostrado (imagem intermediaria descartada) deixava os texels novos so no cache do processador;
+         * 8 desenhos depois, a mesma copia no mesmo lugar nao era escrita de novo (copy_same) e a faixa limpa nao a
+         * incluia: o acelerador lia da memoria o que havia antes (pedacos de outras pecas: a barra de magia com
+         * coracoes e numeros dentro, piscando no Lago Hylia) ate o cache devolver os bytes por conta propria) */
     }
 }
 
@@ -605,9 +608,6 @@ static int alpha_linear(int mode, int hk, float s0, float t0, float st, int sw, 
     return ok;
 }
 
-/* (diagnostico: as partes da chave da ultima peca preparada; o log diz qual mudou numa peca do HUD) */
-#define GE_NCOMP 12
-static uint64_t g_comp[GE_NCOMP];
 static int prep(GePrep *r, int cyc, float s0, float t0, float swTex, float shTex) {
     int k2;
     uint64_t key;
@@ -632,9 +632,6 @@ static int prep(GePrep *r, int cyc, float s0, float t0, float swTex, float shTex
     key = 0xCBF29CE484222325ull;
     key = mix(key, (uint64_t)gx.combW0 << 32 | gx.combW1);
     key = mix(key, (uint64_t)gx.omL << 32 | gx.omH);
-    memset(g_comp, 0, sizeof g_comp);
-    g_comp[0] = (uint64_t)gx.combW0 << 32 | gx.combW1;
-    g_comp[1] = (uint64_t)gx.omL << 32 | gx.omH;
     r->sa = 255;
     if ((logo_on() || gx_ge_alfa) && gx.prim[3] != 255 && alpha_linear(r->mode, r->hk, s0, t0, 32.0f / (float)r->hk, r->sw, r->sh)) {
         r->sa = gx.prim[3]; /* (os texels com alfa 255; o alfa vai na copia) */
@@ -642,19 +639,12 @@ static int prep(GePrep *r, int cyc, float s0, float t0, float swTex, float shTex
     key = mix(key, (uint64_t)(gx.prim[0] | gx.prim[1] << 8 | gx.prim[2] << 16 | (uint32_t)(r->sa != 255 ? 255u : gx.prim[3]) << 24) << 32 |
                        (uint32_t)(gx.env[0] | gx.env[1] << 8 | gx.env[2] << 16 | (uint32_t)gx.env[3] << 24));
     key = mix(key, (uint64_t)gx.blendc[3] << 8 | gx.primLodFrac);
-    g_comp[2] = (uint64_t)(gx.prim[0] | gx.prim[1] << 8 | gx.prim[2] << 16 | (uint32_t)gx.prim[3] << 24) << 32 |
-                (uint32_t)(gx.env[0] | gx.env[1] << 8 | gx.env[2] << 16 | (uint32_t)gx.env[3] << 24);
-    g_comp[3] = (uint64_t)gx.blendc[3] << 8 | gx.primLodFrac | (uint64_t)r->sa << 32;
     for (k2 = 0; k2 < 2; k2++) {
         const GxTile *tl = &gx.tile[(gx.texTile + k2) & 7];
         const GxTex *tx = gx.rtex[k2];
         if (!gx_bake_uses(k2)) {
             continue;
         }
-        g_comp[4 + k2 * 3] = tx ? tx->key : 0;
-        g_comp[5 + k2 * 3] = (uint64_t)tl->uls | (uint64_t)tl->ult << 16 | (uint64_t)tl->lrs << 32 | (uint64_t)tl->lrt << 48;
-        g_comp[6 + k2 * 3] = (uint64_t)tl->cms | (uint64_t)tl->cmt << 4 | (uint64_t)tl->masks << 8 | (uint64_t)tl->maskt << 12 |
-                             (uint64_t)tl->shifts << 16 | (uint64_t)tl->shiftt << 20 | (uint64_t)(tx && tx->hd ? tx->hd->hdk : 0) << 32;
         key = mix(key, tx ? tx->key : 0);
         key = mix(key, (uint64_t)(tx && tx->hd ? tx->hd->hdk : 0)); /* (nao o endereco: muda quando a nova e remontada) */
         key = mix(key, (uint64_t)tl->uls | (uint64_t)tl->ult << 16 | (uint64_t)tl->lrs << 32 | (uint64_t)tl->lrt << 48);
@@ -663,8 +653,6 @@ static int prep(GePrep *r, int cyc, float s0, float t0, float swTex, float shTex
     }
     key = mix(key, (uint64_t)(uint32_t)(int32_t)s0 << 32 | (uint32_t)(int32_t)t0);
     key = mix(key, (uint64_t)r->mode << 40 | (uint64_t)cyc << 32 | (uint64_t)r->hk << 48);
-    g_comp[10] = (uint64_t)(uint32_t)(int32_t)s0 << 32 | (uint32_t)(int32_t)t0;
-    g_comp[11] = (uint64_t)r->mode << 40 | (uint64_t)cyc << 32 | (uint64_t)r->hk << 48;
     r->key = key;
     r->ckey = r->sa != 255 ? mix(key, 0xA1FA000000000000ull | (uint64_t)r->sa) : key;
     return 1;
@@ -689,9 +677,7 @@ static struct {
     uint64_t key;
     uint8_t stable; /* desenhos seguidos com a peca igual */
     uint32_t seen;
-    uint64_t comp[GE_NCOMP]; /* (diagnostico) */
 } g_hist[GE_HIST];
-static unsigned g_dynLog; /* (diagnostico) linhas de "[2d-muda]" ja escritas */
 /* uma peca so vai para o acelerador depois de ficar igual por GE_STABLE desenhos seguidos (~150 ms): numa
  * animacao (o logo aparecendo, um icone piscando) ela fica com os nucleos o tempo todo, em vez de alternar
  * entre os dois (a nitidez mudando a cada imagem: o piscar) e de calcular os texels a cada desenho */
@@ -709,47 +695,15 @@ static int dynamic_piece(int x0, int y0, int x1, int y1, uint64_t key) {
             g_hist[i].seen) {
             g_hist[i].seen = g_histSeen;
             if (g_hist[i].key != key) {
-                static unsigned barLog;
-                const int bar = x1 <= 200 && y0 >= 56 && y1 <= 120; /* (a barra de magia, em 640x480) */
-                if ((bar && barLog < 80) || (g_hist[i].stable >= GE_STABLE && g_dynLog < 60)) {
-                    /* (diagnostico) uma peca que estava parada mudou: quais partes da chave */
-                    static const char *const nm[GE_NCOMP] = { "comb", "modo", "cor", "blend/alfa", "tex0", "tile0", "tile0m",
-                                                              "tex1", "tile1", "tile1m", "s0t0", "tipo" };
-                    char buf[200];
-                    int n = 0, c;
-                    for (c = 0; c < GE_NCOMP && n < 180; c++) {
-                        if (g_hist[i].comp[c] != g_comp[c]) {
-                            n += snprintf(buf + n, sizeof buf - (size_t)n, " %s %llx>%llx", nm[c],
-                                          (unsigned long long)g_hist[i].comp[c], (unsigned long long)g_comp[c]);
-                        }
-                    }
-                    buf[n] = 0;
-                    fprintf(stderr, "[2d-muda] (%d,%d)-(%d,%d) depois de %d iguais:%s\n", x0, y0, x1, y1, g_hist[i].stable,
-                            n ? buf : " (so a chave)");
-                    if (bar) {
-                        barLog++;
-                    } else {
-                        g_dynLog++;
-                    }
-                }
                 g_hist[i].key = key;
                 g_hist[i].stable = 0;
             } else if (g_hist[i].stable < 255) {
                 g_hist[i].stable++;
             }
-            memcpy(g_hist[i].comp, g_comp, sizeof g_comp);
             return g_hist[i].stable < GE_STABLE;
         }
         if (g_hist[i].seen < g_hist[old].seen) {
             old = i;
-        }
-    }
-    {
-        static unsigned newLog;
-        if (x1 <= 200 && y0 >= 56 && y1 <= 120 && newLog < 40) { /* (diagnostico: a barra de magia sem memoria) */
-            fprintf(stderr, "[2d-muda] (%d,%d)-(%d,%d) nova (ocorrencia %d, substitui (%d,%d)-(%d,%d) visto ha %u)\n", x0, y0, x1, y1, occ,
-                    g_hist[old].x0, g_hist[old].y0, g_hist[old].x1, g_hist[old].y1, g_histSeen - g_hist[old].seen);
-            newLog++;
         }
     }
     g_hist[old].x0 = (int16_t)x0;
@@ -760,7 +714,6 @@ static int dynamic_piece(int x0, int y0, int x1, int y1, uint64_t key) {
     g_hist[old].key = key;
     g_hist[old].stable = 0;
     g_hist[old].seen = g_histSeen;
-    memcpy(g_hist[old].comp, g_comp, sizeof g_comp);
     return 1;
 }
 
@@ -1419,8 +1372,6 @@ static int tri_prep(GePrep *r, GeTri *g, const GxVtx *v) {
         key = mix(key, (uint64_t)(uint32_t)(g->c[i][0] + 256.0f * g->c[i][1] + 65536.0f * g->c[i][2]) << 8 | (uint64_t)g->c[i][3]);
     }
     key = mix(key, (uint64_t)r->mode);
-    memset(g_comp, 0, sizeof g_comp);
-    g_comp[11] = key; /* (triangulo: so a chave inteira) */
     r->key = key;
     r->ckey = key;
     r->sa = 255;
@@ -1698,9 +1649,12 @@ int gx_ge_items(const void *key, const GxGeItem **items, int *part) {
 }
 
 /* memoria da parte e o trecho escrito no ultimo desenho dela ([lo, hi); lo >= hi: nada novo) */
+/* (a faixa e entregue uma vez: quem chama limpa o cache dela, e a parte volta a acumular do zero) */
 const uint8_t *gx_ge_part_mem(int part, uint32_t *lo, uint32_t *hi) {
     *lo = g_part[part].dlo;
     *hi = g_part[part].dhi;
+    g_part[part].dlo = 0xFFFFFFFFu;
+    g_part[part].dhi = 0;
     return g_part[part].mem;
 }
 
