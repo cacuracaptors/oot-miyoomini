@@ -401,7 +401,11 @@ static uint64_t tile_key(const GxTile *tl, int tw, int th, int tt) {
     h = mix64(h, (uint64_t)tl->masks | ((uint64_t)tl->maskt << 8) | ((uint64_t)tw << 16) | ((uint64_t)th << 32) |
                      ((uint64_t)tt << 48));
     rowBytes = (unsigned)(dw * bits_of(tl->siz) + 7) / 8u;
-    span = (unsigned)(dh - 1) * tl->line * 8u + rowBytes + 8u; /* +8: troca de metades nas linhas impares */
+    /* (a troca de metades nas linhas impares le o endereco ^ 4: fica na mesma palavra de 8 bytes, entao basta ir ate o
+     * fim da palavra da ultima linha. Antes eram +8 bytes a mais: com uma textura que ocupa a TMEM ate o fim da linha
+     * (o meio da barra de magia, 24x16 IA8), esses 8 bytes eram restos de cargas anteriores e a chave mudava sem a
+     * textura mudar: no acelerador 2D, a barra era refeita e alternava com os nucleos (piscando no Lago Hylia) */
+    span = (unsigned)(dh - 1) * tl->line * 8u + ((rowBytes + 7u) & ~7u);
     if (span > 4096u) {
         span = 4096u;
     }
