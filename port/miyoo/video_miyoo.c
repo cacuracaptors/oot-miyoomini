@@ -760,7 +760,6 @@ static void ge_draw(const void* key, int back) {
         }
         if (ge_blit(ge_phys[part] + it[i].off, it[i].pw, it[i].ph, &sr, page, PANEL_W, PANEL_H, &dr, hw_rotate, &fence) == 0) {
             done++;
-            mi.Wait(TRUE, fence); /* (teste do lote 168: cada copia acaba antes da proxima comecar) */
         }
     }
     if (done) {
