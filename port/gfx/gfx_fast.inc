@@ -550,7 +550,7 @@ static int premix_geo(const GxTex *A, const GxTex *B, const GxTile *ta, const Gx
         na = wa << (ge - eA); /* periodo de cada uma em texels da grade */
         nb = wb << (ge - eB);
         size = na > nb ? na : nb;
-        if (size > (gx_mistura_desliza >= 2 ? PREMIX_MAX : 64)) {
+        if (size < 8 || size > (gx_mistura_desliza >= 2 ? PREMIX_MAX : 64)) {
             return 0;
         }
         /* grade: u = S*2^ge - ulM/4. Com ulM = ulA * 2^(ge-eA) a 1a fica em u * ra/64 (reduzido ao periodo, que e
@@ -570,39 +570,59 @@ static int premix_geo(const GxTex *A, const GxTex *B, const GxTile *ta, const Gx
     return 1;
 }
 
-/* uma camada da mistura numa linha da grade: a textura (RGBA8888, repete; w e h potencias de 2) lida nas posicoes
- * pos = o + x * r (em 1/64 de texel), linear entre os vizinhos; separavel: primeiro as duas linhas da textura
- * (vertical), depois as colunas. Saida x 4096 por canal. */
-static void premix_row(const uint8_t *px, int w, int h, int oS, int rS, int posT, int n, int32_t *out) {
-    static int32_t row[256 * 4]; /* (w ate 256; so a thread que monta a fila chama) */
-    const int y0 = (posT >> 6) & (h - 1), y1 = (y0 + 1) & (h - 1), ft = posT & 63;
-    const uint8_t *r0 = px + (size_t)4 * y0 * w, *r1 = px + (size_t)4 * y1 * w;
-    int i, x;
-    if (ft == 0) {
-        for (i = 0; i < 4 * w; i++) row[i] = r0[i] << 6;
-    } else {
-        for (i = 0; i < 4 * w; i++) row[i] = r0[i] * (64 - ft) + r1[i] * ft;
-    }
-    if (rS == 64 && (oS & 63) == 0) {
-        /* mesma grade e deslocamento inteiro: copia (girando) */
-        const int x0 = (oS >> 6) & (w - 1);
-        for (x = 0; x < n; x++) {
-            const int32_t *a = row + 4 * ((x0 + x) & (w - 1));
-            out[4 * x] = a[0] << 6; out[4 * x + 1] = a[1] << 6; out[4 * x + 2] = a[2] << 6; out[4 * x + 3] = a[3] << 6;
-        }
-        return;
-    }
-    for (x = 0; x < n; x++) {
-        const int pos = oS + x * rS, xa = (pos >> 6) & (w - 1), xb = (xa + 1) & (w - 1), fs = pos & 63;
-        const int32_t *a = row + 4 * xa, *b = row + 4 * xb;
-        int32_t *o = out + 4 * x;
-        if (fs == 0) {
-            o[0] = a[0] << 6; o[1] = a[1] << 6; o[2] = a[2] << 6; o[3] = a[3] << 6;
+/* o[i] = (a[i] * wa + b[i] * wb + 2^(sh-1)) >> sh, n bytes (wa + wb = 2^sh; sh = 6 ou 8) */
+static void premix_lerp8(uint8_t *o, const uint8_t *a, const uint8_t *b, int wa, int wb, int sh, int n) {
+    int i = 0;
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+    const uint8x8_t va = vdup_n_u8((uint8_t)wa), vb = vdup_n_u8((uint8_t)wb);
+    for (; i + 16 <= n; i += 16) {
+        const uint8x16_t x = vld1q_u8(a + i), y = vld1q_u8(b + i);
+        const uint16x8_t lo = vmlal_u8(vmull_u8(vget_low_u8(x), va), vget_low_u8(y), vb);
+        const uint16x8_t hi = vmlal_u8(vmull_u8(vget_high_u8(x), va), vget_high_u8(y), vb);
+        if (sh == 6) {
+            vst1q_u8(o + i, vcombine_u8(vrshrn_n_u16(lo, 6), vrshrn_n_u16(hi, 6)));
         } else {
-            o[0] = a[0] * (64 - fs) + b[0] * fs;
-            o[1] = a[1] * (64 - fs) + b[1] * fs;
-            o[2] = a[2] * (64 - fs) + b[2] * fs;
-            o[3] = a[3] * (64 - fs) + b[3] * fs;
+            vst1q_u8(o + i, vcombine_u8(vrshrn_n_u16(lo, 8), vrshrn_n_u16(hi, 8)));
+        }
+    }
+#endif
+    for (; i < n; i++) {
+        o[i] = (uint8_t)((a[i] * wa + b[i] * wb + (1 << (sh - 1))) >> sh);
+    }
+}
+
+/* uma camada da mistura numa linha da grade (n texels): a textura (RGBA8888, repete; w e h potencias de 2) lida nas
+ * posicoes oS + x * rS (1/64 de texel; rS = 64, 32 ou 16) da linha posT, linear entre os vizinhos. Primeiro a linha
+ * da textura (vertical), repetida o bastante para nao dar a volta; depois, para cada fase x % k (k = 64 / rS), uma
+ * mistura de texels seguidos com a mesma fracao; as fases sao intercaladas na saida. */
+static void premix_row(const uint8_t *px, int w, int h, int oS, int rS, int posT, int n, uint8_t *out) {
+    static uint8_t ext[(PREMIX_MAX * 3 + 4) * 4] __attribute__((aligned(16))), ph[(PREMIX_MAX + 4) * 4] __attribute__((aligned(16))); /* (so a thread que monta a fila chama) */
+    const int y0 = (posT >> 6) & (h - 1), y1 = (y0 + 1) & (h - 1), ft = posT & 63;
+    const int k = 64 / rS, m = n / k, L = w + m + 2;
+    int t, p;
+    if (ft == 0) {
+        memcpy(ext, px + (size_t)4 * y0 * w, (size_t)4 * w);
+    } else {
+        premix_lerp8(ext, px + (size_t)4 * y0 * w, px + (size_t)4 * y1 * w, 64 - ft, ft, 6, 4 * w);
+    }
+    for (t = w; t < L; t += w) {
+        memcpy(ext + 4 * t, ext, (size_t)4 * (L - t < w ? L - t : w));
+    }
+    for (p = 0; p < k; p++) {
+        const int pos = oS + p * rS, i0 = (pos >> 6) % w, f = pos & 63;
+        uint8_t *dst = k == 1 ? out : ph;
+        if (f == 0) {
+            memcpy(dst, ext + 4 * i0, (size_t)4 * m);
+        } else {
+            premix_lerp8(dst, ext + 4 * i0, ext + 4 * (i0 + 1), 64 - f, f, 6, 4 * m);
+        }
+        if (k > 1) {
+            const uint32_t *src = (const uint32_t *)ph;
+            uint32_t *o32 = (uint32_t *)out;
+            int j;
+            for (j = 0; j < m; j++) {
+                o32[p + k * j] = src[j];
+            }
         }
     }
 }
@@ -662,18 +682,13 @@ static GxTex *premix_get(const GxTex *A, const GxTex *B, int v, const PremixGeo 
     } else {
         const uint8_t *pa = (const uint8_t *)A->px, *pb = (const uint8_t *)B->px;
         uint8_t *pm = (uint8_t *)m->px;
-        static int32_t la[PREMIX_MAX * 4], lb[PREMIX_MAX * 4];
-        int x, y;
+        static uint8_t la[PREMIX_MAX * 4] __attribute__((aligned(16))), lb[PREMIX_MAX * 4] __attribute__((aligned(16)));
+        int y;
         const uint64_t t0 = gx_now_ns();
         for (y = 0; y < pg->sizeT; y++) {
-            uint8_t *o = pm + (size_t)4 * y * pg->sizeS;
             premix_row(pa, A->w, A->h, 0, pg->raS, y * pg->raT, pg->sizeS, la);
             premix_row(pb, B->w, B->h, pg->obS, pg->rbS, pg->obT + y * pg->rbT, pg->sizeS, lb);
-            for (x = 0; x < 4 * pg->sizeS; x++) {
-                const int a = (la[x] + 2048) >> 12, b = (lb[x] + 2048) >> 12;
-                const int r = (((b - a) * v + 0x80) >> 8) + a;
-                o[x] = (uint8_t)(r < 0 ? 0 : (r > 255 ? 255 : r));
-            }
+            premix_lerp8(pm + (size_t)4 * y * pg->sizeS, la, lb, 256 - v, v, 8, 4 * pg->sizeS);
         }
         g_pmNs += gx_now_ns() - t0;
         g_pmN++;
