@@ -709,7 +709,9 @@ static int dynamic_piece(int x0, int y0, int x1, int y1, uint64_t key) {
             g_hist[i].seen) {
             g_hist[i].seen = g_histSeen;
             if (g_hist[i].key != key) {
-                if (g_hist[i].stable >= GE_STABLE && g_dynLog < 60) {
+                static unsigned barLog;
+                const int bar = x1 <= 200 && y0 >= 56 && y1 <= 120; /* (a barra de magia, em 640x480) */
+                if ((bar && barLog < 80) || (g_hist[i].stable >= GE_STABLE && g_dynLog < 60)) {
                     /* (diagnostico) uma peca que estava parada mudou: quais partes da chave */
                     static const char *const nm[GE_NCOMP] = { "comb", "modo", "cor", "blend/alfa", "tex0", "tile0", "tile0m",
                                                               "tex1", "tile1", "tile1m", "s0t0", "tipo" };
@@ -724,7 +726,11 @@ static int dynamic_piece(int x0, int y0, int x1, int y1, uint64_t key) {
                     buf[n] = 0;
                     fprintf(stderr, "[2d-muda] (%d,%d)-(%d,%d) depois de %d iguais:%s\n", x0, y0, x1, y1, g_hist[i].stable,
                             n ? buf : " (so a chave)");
-                    g_dynLog++;
+                    if (bar) {
+                        barLog++;
+                    } else {
+                        g_dynLog++;
+                    }
                 }
                 g_hist[i].key = key;
                 g_hist[i].stable = 0;
@@ -736,6 +742,14 @@ static int dynamic_piece(int x0, int y0, int x1, int y1, uint64_t key) {
         }
         if (g_hist[i].seen < g_hist[old].seen) {
             old = i;
+        }
+    }
+    {
+        static unsigned newLog;
+        if (x1 <= 200 && y0 >= 56 && y1 <= 120 && newLog < 40) { /* (diagnostico: a barra de magia sem memoria) */
+            fprintf(stderr, "[2d-muda] (%d,%d)-(%d,%d) nova (ocorrencia %d, substitui (%d,%d)-(%d,%d) visto ha %u)\n", x0, y0, x1, y1, occ,
+                    g_hist[old].x0, g_hist[old].y0, g_hist[old].x1, g_hist[old].y1, g_histSeen - g_hist[old].seen);
+            newLog++;
         }
     }
     g_hist[old].x0 = (int16_t)x0;
