@@ -1645,6 +1645,13 @@ int gx_ge_items(const void *key, const GxGeItem **items, int *part) {
     return 0;
 }
 
+/* (diagnostico do lote 167) a parte que o desenho esta usando agora e o modo (0 nada, 1 varredura, 2 desenho) */
+void gx_ge_dbg_state(int *cur, int *next, int *mode) {
+    *cur = g_cur;
+    *next = g_nextPart;
+    *mode = g_mode;
+}
+
 /* memoria da parte e o trecho escrito no ultimo desenho dela ([lo, hi); lo >= hi: nada novo) */
 const uint8_t *gx_ge_part_mem(int part, uint32_t *lo, uint32_t *hi) {
     *lo = g_part[part].dlo;
