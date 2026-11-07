@@ -751,26 +751,6 @@ static void ge_draw(const void* key, int back) {
     if (hi > lo && mem != NULL) {
         mi.Flush((void*)(mem + lo), hi - lo); /* (os texels novos estao no cache do processador) */
     }
-    {
-        /* (diagnostico do lote 167: a barra de magia; uma linha por imagem mostrada, ate 300) */
-        static unsigned dbgN;
-        if (dbgN < 600) {
-            extern void gx_ge_dbg_state(int* cur, int* next, int* mode);
-            char buf[400];
-            int cur, nxt, mode, o = 0;
-            gx_ge_dbg_state(&cur, &nxt, &mode);
-            for (i = 0; i < n && o < 330; i++) {
-                if (it[i].dy >= 60 && it[i].dy < 90 && it[i].dx < 200) {
-                    o += snprintf(buf + o, sizeof buf - (size_t)o, " [%d,%d %dx%d off=%u p=%dx%d s=%dx%d]", it[i].dx, it[i].dy,
-                                  it[i].dw, it[i].dh, (unsigned)it[i].off, it[i].pw, it[i].ph, it[i].sw, it[i].sh);
-                }
-            }
-            buf[o] = 0;
-            if (o > 0) fprintf(stderr, "[ge-tela] parte %d (%d pecas, cache %u..%u) desenho agora: parte %d modo %d, proxima %d, pagina %d:%s\n", part, n,
-                    (unsigned)lo, (unsigned)hi, cur, mode, nxt, back, buf);
-            dbgN += o > 0;
-        }
-    }
     for (i = 0; i < n; i++) {
         MI_GFX_Rect_t sr = { 1, 1, it[i].sw, it[i].sh };
         MI_GFX_Rect_t dr = { it[i].dx, it[i].dy, (MI_U32)it[i].dw, (MI_U32)it[i].dh };
@@ -780,6 +760,7 @@ static void ge_draw(const void* key, int back) {
         }
         if (ge_blit(ge_phys[part] + it[i].off, it[i].pw, it[i].ph, &sr, page, PANEL_W, PANEL_H, &dr, hw_rotate, &fence) == 0) {
             done++;
+            mi.Wait(TRUE, fence); /* (teste do lote 168: cada copia acaba antes da proxima comecar) */
         }
     }
     if (done) {
