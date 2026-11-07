@@ -189,7 +189,6 @@ extern int gx_ceu_mistura, gx_corte; /* gfx_fast.inc: ceu pre-misturado e recort
 extern int port_fi_enabled;      /* port/frame_interp.c: quadros intermediarios (30 por segundo) */
 extern int port_opt_idioma;      /* port/lang.c: pacote de idioma */
 extern int port_opt_extra_adiado; /* port/gfx/gfx_hook.c: quadro do jogo desenhado depois do 1/3 */
-extern int port_opt_fi_scroll;   /* port/frame_interp.c: interpola texturas que deslizam */
 extern int port_opt_degraus;      /* port/gfx/gfx_hook.c: degraus entre 30 e 20 fps */
 extern int port_opt_folga;        /* port/gfx/gfx_hook.c: vsyncs de atraso extra das imagens */
 extern int gx_steal;              /* port/gfx/gfx_fast.inc: a principal pega linhas da auxiliar no fim */
@@ -214,8 +213,6 @@ static const struct {
       "1 = 30 frames per second on screen (draws in-between frames; game speed does not change), 0 = 20 fps like the original" },
     { "General", "frame_rate_steps", "quadros_degraus", &port_opt_degraus,
       "1 = in heavy scenes the frame rate drops in steps (30, 26, 25, 24... down to 20 fps) instead of going straight to 20; 0 = only 30 or 20" },
-    { "General", "interpolate_scrolling_textures", "", &port_opt_fi_scroll,
-      "1 = textures that slide (water, waterfalls, lava) also move smoothly in the in-between frames; 0 = they move only in the real frames (20 per second), which may be lighter in places full of them, like Zora's Domain" },
     { "General", "cpu_clock", "clock", &port_opt_clock,
       "CPU MHz set when the game starts (e.g. 1500 = overclock; runs hotter and uses more battery); 0 = system default (1200). Default: 1800 on the Miyoo Mini Plus, 1600 on the other devices (Mini, Mini v4, Mini Flip)" },
     { "Performance", "clock_guard", "", &port_opt_clock_guard,
@@ -703,7 +700,6 @@ static const struct {
     { "language", 0 },
     { "frame_interpolation", 1 },
     { "frame_rate_steps", 1 },
-    { "interpolate_scrolling_textures", 1 },
     { "cpu_clock", 1800 },
     { "clock_guard", 1 },
     { "menu_theme", 1 },
