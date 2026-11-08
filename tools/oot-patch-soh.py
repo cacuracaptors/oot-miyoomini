@@ -2157,12 +2157,22 @@ patch_file("src/overlays/actors/ovl_player_actor/z_player.c", [
 # pendurado, carregando algo, com o escudo levantado, falando ou em cena.
 PORT_JUMP = r'''
 /* port: pulo manual (port/miyoo/input_miyoo.c avisa o botao em port_input_jump) */
+/* quadros desde o pulo manual (0 = nao esta num pulo manual): no ar, a borda so e agarrada se as maos alcancam
+ * (Player_Action_8084411C) */
+s32 Port_ManualAir;
+
 static void Port_ManualJump(Player* this, PlayState* play) {
     static s32 sPortJumpPrev;
     s32 held = ({ extern int port_input_jump; port_input_jump; });
     s32 pressed = held && !sPortJumpPrev;
     PlayerActionFunc f = this->actionFunc;
 
+    if (Port_ManualAir != 0) {
+        Port_ManualAir++;
+        if ((Port_ManualAir > 3) && (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
+            Port_ManualAir = 0; /* voltou ao chao */
+        }
+    }
     sPortJumpPrev = held;
     if (!pressed || !({ extern int port_opt_manual_jump; port_opt_manual_jump; })) {
         return;
@@ -2191,6 +2201,7 @@ static void Port_ManualJump(Player* this, PlayState* play) {
         }
         func_80838940(this, anim, vel, play, NA_SE_VO_LI_AUTO_JUMP);
         this->av2.actionVar2 = 1;
+        Port_ManualAir = 1;
     }
 }
 
@@ -2341,6 +2352,18 @@ void Player_Action_8084411C(Player* this, PlayState* play) {\n"""),
      "        if (!(this->stateFlags2 & PLAYER_STATE2_19)) {\n            func_8083DFE0(this, &speedTarget, &yawTarget);\n        }\n",
      "        if (!(this->stateFlags2 & PLAYER_STATE2_19)) {\n            func_8083DFE0(this, &speedTarget, &yawTarget);\n"
      "            Port_AirSteer(this, play, speedTarget, yawTarget); /* port: opcao air_steering */\n        }\n"),
+])
+# port: pulo manual e borda alta. No ar, encostando numa parede com a borda ate 150 unidades acima dos pes, o jogo poe o
+# Link pendurado nela (world.pos.y += yDistToLedge): no jogo original isso so acontece pulando de uma beirada, e as
+# alturas foram desenhadas para isso. Com o pulo manual, pulando de frente para uma parede alta, ele "teleportava" ate a
+# borda (relato de 11/2026). Agora, num pulo manual, so agarra se a borda estiver ao alcance das maos: no maximo a altura
+# que ele alcanca para subir uma borda do chao (unk_14: 79,4 adulto, 47 crianca), a partir dos pes naquele quadro.
+patch_file("src/overlays/actors/ovl_player_actor/z_player.c", [
+    ("pulo manual: borda so ao alcance das maos",
+     "                        } else if ((this->ledgeClimbType >= PLAYER_LEDGE_CLIMB_2) && (this->yDistToLedge < 150.0f) &&\n",
+     "                        } else if ((this->ledgeClimbType >= PLAYER_LEDGE_CLIMB_2) && (this->yDistToLedge < 150.0f) &&\n"
+     "                                   !(({ extern s32 Port_ManualAir; Port_ManualAir; }) != 0 &&\n"
+     "                                     (this->yDistToLedge > this->ageProperties->unk_14)) && /* port */\n"),
 ])
 # port: corrida sem a paradinha ao aterrissar. Correndo (A segurado depois da rolada) e pulando, ao tocar o chao o
 # jogo poe a animacao de aterrissar (run_jump_end / short_landing) com o Link parado ate ela acabar. Com a corrida
