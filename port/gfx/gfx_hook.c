@@ -806,10 +806,6 @@ void Port_GfxIdle(void) {
 static int hook_gfx_task(OSTask *t, int resume, volatile int *yield) {
     int i;
     (void)resume;
-    {
-        extern void gx_rep_task(void); /* gfx_rsp.c: diagnostico OOT_REPETICAO (temporario) */
-        gx_rep_task();
-    }
     if (capture_on_request(t)) {
         /* (ja desenhou) */
     } else {
