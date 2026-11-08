@@ -155,7 +155,7 @@ static const char* lang_text(const char* en, const char* pt) {
         const char* jp = miyoo_menu_jp(en);
         return jp != NULL ? jp : en;
     }
-    if (port_opt_idioma >= 3 && port_opt_idioma <= 5 && miyoo_menu_eu != NULL) {
+    if (port_opt_idioma >= 3 && port_opt_idioma <= 6 && miyoo_menu_eu != NULL) {
         const char* eu = miyoo_menu_eu(en, port_opt_idioma);
         return eu != NULL ? eu : en;
     }

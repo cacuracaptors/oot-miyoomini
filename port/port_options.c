@@ -215,7 +215,7 @@ static const struct {
 } k_opts[] = {
     /* ---------------------------------------------------------------- General */
     { "General", "language", "idioma", &port_opt_idioma,
-      "0 = English (original), 1 = Brazilian Portuguese (fan translation Zelda 64 BR v1.8, file idiomas/pt.oot), 2 = Japanese (the original Japanese text, also in the US cartridge), 3 = German, 4 = French (3 and 4 come from the European ROM: put the \"(Europe) (En,Fr,De) (Rev A)\" ROM, .zip or not, in the game folder once; the game makes idiomas/de.oot and fr.oot from it), 5 = Italian (fan translation Zelda 64 ITA v1.00 by XXcentury, file idiomas/it.oot). Takes effect when the game starts" },
+      "0 = English (original), 1 = Brazilian Portuguese (fan translation Zelda 64 BR v1.8, file idiomas/pt.oot), 2 = Japanese (the original Japanese text, also in the US cartridge), 3 = German, 4 = French (3 and 4 come from the European ROM: put the \"(Europe) (En,Fr,De) (Rev A)\" ROM, .zip or not, in the game folder once; the game makes idiomas/de.oot and fr.oot from it), 5 = Italian (fan translation Zelda 64 ITA v1.00 by XXcentury, file idiomas/it.oot), 6 = Spanish (fan translation by eduardo_a2j v2.2, file idiomas/es.oot). Takes effect when the game starts" },
     { "General", "frame_interpolation", "quadros_extras", &port_fi_enabled,
       "1 = 30 frames per second on screen (draws in-between frames; game speed does not change), 0 = 20 fps like the original" },
     { "General", "frame_rate_steps", "quadros_degraus", &port_opt_degraus,

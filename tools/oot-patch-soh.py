@@ -14,6 +14,22 @@ def _pal(text):
     return [0x80 + _PALCH.index(c) if c in _PALCH else ord(c) for c in text]
 
 
+# espanhol (idiomas/es.oot, traducao de eduardo_a2j pelo Patcher64+): a fonte do pacote desenha o "¡" no "<", o "ñ"
+# no "\\" e o "¿" no 0x82; os acentos ficam onde a fonte do jogo os tem (Languages.json do Patcher64+)
+_ESCH = {"\u00a1": 0x3C, "\u00f1": 0x5C, "\u00bf": 0x82, "\u00c1": 0x81, "\u00c9": 0x86, "\u00cd": 0x89,
+         "\u00d3": 0x8A, "\u00da": 0x8D, "\u00dc": 0x8E, "\u00e1": 0x91, "\u00e9": 0x96, "\u00ed": 0x99,
+         "\u00f3": 0x9A, "\u00fa": 0x9C, "\u00fc": 0x9E}
+
+
+def _es(text):
+    """texto espanhol -> bytes do texto do jogo (com a fonte do pacote espanhol)"""
+    return [_ESCH[c] if c in _ESCH else ord(c) for c in text]
+
+
+def _cbytes(b):
+    return ", ".join("0x%02X" % x for x in b)
+
+
 def O(name):
     """expressao C que le a opcao port_opt_<name> (sem precisar de cabecalho)"""
     return "({ extern int port_opt_%s; port_opt_%s; })" % (name, name)
@@ -97,6 +113,7 @@ static s32 Port_MsgMarketSneak(PlayState* play, u16 textId, u8* buf, s32 cap) {
     static const u8 de[] = { 0x44, 0x75, 0x20, 0x73, 0x69, 0x65, 0x68, 0x73, 0x74, 0x20, 0x67, 0x65, 0x6C, 0x61, 0x6E, 0x67, 0x77, 0x65, 0x69, 0x6C, 0x74, 0x20, 0x61, 0x75, 0x73, 0x2E, 0x01, 0x4C, 0x75, 0x73, 0x74, 0x20, 0x61, 0x75, 0x66, 0x20, 0x65, 0x69, 0x6E, 0x65, 0x6E, 0x20, 0x53, 0x70, 0x61, 0x7A, 0x69, 0x65, 0x72, 0x67, 0x61, 0x6E, 0x67, 0x3F, 0x01, 0x1B, 0x05, 0x42, 0x4A, 0x61, 0x01, 0x4E, 0x65, 0x69, 0x6E, 0x05, 0x40, 0x02 };
     static const u8 fr[] = { 0x54, 0x75, 0x20, 0x61, 0x73, 0x20, 0x6C, 0x27, 0x61, 0x69, 0x72, 0x20, 0x64, 0x65, 0x20, 0x74, 0x27, 0x65, 0x6E, 0x6E, 0x75, 0x79, 0x65, 0x72, 0x2E, 0x01, 0x54, 0x75, 0x20, 0x76, 0x65, 0x75, 0x78, 0x20, 0x61, 0x6C, 0x6C, 0x65, 0x72, 0x20, 0x66, 0x61, 0x69, 0x72, 0x65, 0x20, 0x75, 0x6E, 0x20, 0x74, 0x6F, 0x75, 0x72, 0x3F, 0x01, 0x1B, 0x05, 0x42, 0x4F, 0x75, 0x69, 0x01, 0x4E, 0x6F, 0x6E, 0x05, 0x40, 0x02 };
     static const u8 it[] = { 0x53, 0x65, 0x6D, 0x62, 0x72, 0x69, 0x20, 0x61, 0x6E, 0x6E, 0x6F, 0x69, 0x61, 0x74, 0x6F, 0x2E, 0x01, 0x56, 0x75, 0x6F, 0x69, 0x20, 0x66, 0x61, 0x72, 0x65, 0x20, 0x75, 0x6E, 0x20, 0x67, 0x69, 0x72, 0x6F, 0x3F, 0x01, 0x1B, 0x05, 0x42, 0x53, 0x99, 0x01, 0x4E, 0x6F, 0x05, 0x40, 0x02 };
+    static const u8 es[] = { @@ESMS@@ };
     static const u16 jp[] = { 0x82D0, 0x82DC, 0x82BB, 0x82A4, 0x82BE, 0x82C8, 0x8140, 0x82B3, 0x82F1, 0x82DB, 0x82C9, 0x8140, 0x82A2, 0x82AD, 0x82A9, 0x8148, 0x000A, 0x81BC, 0x000B, 0x0C02, 0x82A4, 0x82F1, 0x000A, 0x82E2, 0x82DF, 0x82C6, 0x82AD, 0x000B, 0x0C00, 0x8170 };
     MessageContext* msgCtx = &play->msgCtx;
     s32 i;
@@ -116,9 +133,10 @@ static s32 Port_MsgMarketSneak(PlayState* play, u16 textId, u8* buf, s32 cap) {
     } else {
         extern int port_opt_idioma;
         const u8* s = port_opt_idioma == 1 ? pt : port_opt_idioma == 3 ? de : port_opt_idioma == 4 ? fr
-                    : port_opt_idioma == 5 ? it : en;
+                    : port_opt_idioma == 5 ? it : port_opt_idioma == 6 ? es : en;
         s32 n = port_opt_idioma == 1 ? (s32)sizeof(pt) : port_opt_idioma == 3 ? (s32)sizeof(de)
-              : port_opt_idioma == 4 ? (s32)sizeof(fr) : port_opt_idioma == 5 ? (s32)sizeof(it) : (s32)sizeof(en);
+              : port_opt_idioma == 4 ? (s32)sizeof(fr) : port_opt_idioma == 5 ? (s32)sizeof(it)
+              : port_opt_idioma == 6 ? (s32)sizeof(es) : (s32)sizeof(en);
         if (n > cap) {
             return 0;
         }
@@ -178,13 +196,14 @@ static void Port_MsgInject(PlayState* play, u16 textId, u8* buf, s32 cap) {
         static const char deQ[] = "Willst Du aufh\x9Bren?";
         static const char frQ[] = "Tu veux arr\x97ter de p\x97" "cher?";
         static const char itQ[] = "Vuoi smettere di pescare?";
-        static const char* const yes[6] = { "Yes", "Sim", "Yes", "Ja", "Oui", "S\x99" }; /* (0x99: i com acento grave no pacote italiano) */
-        static const char* const no[6] = { "No", "N\x93o", "No", "Nein", "Non", "No" };
+        static const char esQ[] = "\x82Quieres dejar de pescar?"; /* (0x82: o "¿" no pacote espanhol) */
+        static const char* const yes[7] = { "Yes", "Sim", "Yes", "Ja", "Oui", "S\x99", "S\x99" }; /* (0x99: i com acento grave no pacote italiano; i com agudo no espanhol) */
+        static const char* const no[7] = { "No", "N\x93o", "No", "Nein", "Non", "No", "No" };
         const int lg = ({ extern int port_opt_idioma; port_opt_idioma; }) >= 0 &&
-                               ({ extern int port_opt_idioma; port_opt_idioma; }) <= 5
+                               ({ extern int port_opt_idioma; port_opt_idioma; }) <= 6
                            ? ({ extern int port_opt_idioma; port_opt_idioma; })
                            : 0;
-        const char* q = lg == 1 ? ptQ : lg == 3 ? deQ : lg == 4 ? frQ : lg == 5 ? itQ : enQ;
+        const char* q = lg == 1 ? ptQ : lg == 3 ? deQ : lg == 4 ? frQ : lg == 5 ? itQ : lg == 6 ? esQ : enQ;
         end = Port_MsgEnd(buf, msgCtx->msgLength, &lines);
         if (end < 0) {
             return;
@@ -278,6 +297,9 @@ static void Port_MsgInject(PlayState* play, u16 textId, u8* buf, s32 cap) {
 }
 
 '''
+PORT_MSG = PORT_MSG.replace("@@ESMS@@", _cbytes(_es("Pareces aburrido.") + [0x01] + _es("\u00bfQuieres dar un paseo?") +
+                                                [0x01, 0x1B, 0x05, 0x42] + _es("S\u00ed") + [0x01] + _es("No") +
+                                                [0x05, 0x40, 0x02]))
 patch_file("src/code/z_message.c", [
     ("SoH: funcoes das mensagens",
      "void Message_OpenText(PlayState* play, u16 textId) {\n",
@@ -3227,6 +3249,7 @@ static void Port_MsgAskEquip(PlayState* play, u16 textId, u8* buf, s32 cap) {
     static const u8 de[] = { @@DE@@ };
     static const u8 fr[] = { @@FR@@ };
     static const u8 it[] = { @@IT@@ };
+    static const u8 es[] = { @@ES@@ };
     static const u16 jp[] = { @@JP@@ };
     MessageContext* msgCtx = &play->msgCtx;
     s32 adult = LINK_IS_ADULT, i, end, lines, n;
@@ -3254,9 +3277,10 @@ static void Port_MsgAskEquip(PlayState* play, u16 textId, u8* buf, s32 cap) {
     } else {
         extern int port_opt_idioma;
         const u8* s = port_opt_idioma == 1 ? pt : port_opt_idioma == 3 ? de : port_opt_idioma == 4 ? fr
-                    : port_opt_idioma == 5 ? it : en;
+                    : port_opt_idioma == 5 ? it : port_opt_idioma == 6 ? es : en;
         n = port_opt_idioma == 1 ? (s32)sizeof(pt) : port_opt_idioma == 3 ? (s32)sizeof(de)
-          : port_opt_idioma == 4 ? (s32)sizeof(fr) : port_opt_idioma == 5 ? (s32)sizeof(it) : (s32)sizeof(en);
+          : port_opt_idioma == 4 ? (s32)sizeof(fr) : port_opt_idioma == 5 ? (s32)sizeof(it)
+          : port_opt_idioma == 6 ? (s32)sizeof(es) : (s32)sizeof(en);
         end = Port_MsgEnd(buf, msgCtx->msgLength, &lines);
         if (end < 0 || msgCtx->msgLength + n > cap) {
             return;
@@ -3285,6 +3309,8 @@ PORT_ASKEQ = PORT_ASKEQ.replace("@@EN@@", _nesb("Would you like to equip it now?
                        .replace("@@DE@@", _nesb("Jetzt ausr\u00fcsten?", "Ja", "Nein")) \
                        .replace("@@FR@@", _nesb("L'\u00e9quiper maintenant?", "Oui", "Non")) \
                        .replace("@@IT@@", _nesb("Vuoi equipaggiarlo ora?", "S\u00ef", "No")) \
+                       .replace("@@ES@@", _cbytes([0x04] + _es("\u00bfQuieres equiparlo ahora?") + [0x01, 0x01, 0x1B, 0x05, 0x42] +
+                                                  _es("S\u00ed") + [0x01] + _es("No") + [0x05, 0x40])) \
                        .replace("@@JP@@", ", ".join("0x%04X" % x for x in _jpq))
 patch_file("src/code/z_message.c", [
     ("SoH AskToEquip: mensagem",

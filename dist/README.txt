@@ -85,9 +85,9 @@ FEATURES
   smooth aiming, sprint (keep holding A after a roll), ocarina on the
   D-pad, real vibration, tunic/boots switching without the pause menu
 - English, Japanese, Brazilian Portuguese (the Zelda 64 BR fan translation),
-  Italian (the Zelda 64 ITA fan translation) and, from your European ROM,
-  German and French
-- In-game options menu (Menu+Start) in all six languages, with 10 save
+  Italian (the Zelda 64 ITA fan translation), Spanish (the fan translation
+  by eduardo_a2j) and, from your European ROM, German and French
+- In-game options menu (Menu+Start) in all seven languages, with 10 save
   state slots with pictures
 - Many optional enhancements from Ship of Harkinian (off by default), fixes
   (on by default) and cheats (off by default); see the README on GitHub
@@ -119,6 +119,8 @@ CREDITS
   Fserve and Solid_One, with graphics from Patcher64+
 - Zelda 64 ITA (Italian translation, v1.00, 2001) by XXcentury, with
   Rulesless and Brisma; graphics from Patcher64+ (GhostlyDark)
+- Spanish translation (v2.2) by eduardo_a2j (Dorando project), as packaged
+  by Patcher64+ (Admentus, GhostlyDark)
 - Audio microcode in C based on mupen64plus's HLE
 - Miyoo Mini toolchain by Shaun Inman
 - Options menu font: DejaVu Sans

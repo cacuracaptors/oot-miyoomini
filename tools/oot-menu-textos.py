@@ -16,8 +16,8 @@ T = {
     "Cores deste menu e dos avisos curtos (estado salvo...): verde escuro e dourado, ou claro (verde-limão, branco e azul-marinho).",
     "このメニューと短い通知の色：深緑と金、または明るい色（黄緑、白、紺）。"),
 "language": ("言語（ゲーム再起動）",
-    "Idioma do jogo e deste menu: inglês (original), português do Brasil (tradução Zelda 64 BR), japonês (o texto original japonês, que também está no cartucho americano), alemão ou francês (estes dois saem da ROM europeia: ponha uma vez na pasta do jogo a ROM \"(Europe) (En,Fr,De) (Rev A)\", pode ser o .zip) ou italiano (tradução Zelda 64 ITA, de XXcentury). O jogo reinicia para trocar.",
-    "ゲームとこのメニューの言語：英語、ブラジルポルトガル語、日本語（アメリカ版カートリッジにも入っている元の日本語）、ドイツ語、フランス語（この2つはヨーロッパ版ROMから取り出す：「(Europe) (En,Fr,De) (Rev A)」のROM（.zipでも可）を一度ゲームのフォルダに入れる）、イタリア語（ファン翻訳 Zelda 64 ITA）。ゲームを再起動すると反映されます。"),
+    "Idioma do jogo e deste menu: inglês (original), português do Brasil (tradução Zelda 64 BR), japonês (o texto original japonês, que também está no cartucho americano), alemão ou francês (estes dois saem da ROM europeia: ponha uma vez na pasta do jogo a ROM \"(Europe) (En,Fr,De) (Rev A)\", pode ser o .zip) italiano (tradução Zelda 64 ITA, de XXcentury) ou espanhol (tradução de fã de eduardo_a2j). O jogo reinicia para trocar.",
+    "ゲームとこのメニューの言語：英語、ブラジルポルトガル語、日本語（アメリカ版カートリッジにも入っている元の日本語）、ドイツ語、フランス語（この2つはヨーロッパ版ROMから取り出す：「(Europe) (En,Fr,De) (Rev A)」のROM（.zipでも可）を一度ゲームのフォルダに入れる）、イタリア語（ファン翻訳 Zelda 64 ITA）、スペイン語（eduardo_a2jのファン翻訳）。ゲームを再起動すると反映されます。"),
 "cpu_clock": ("CPUクロック（MHz・再起動）",
     "Velocidade do processador do aparelho. Mais alto deixa o jogo mais fluido, mas esquenta mais e gasta mais bateria. Padrão: 1800 no Miyoo Mini Plus e 1600 nos outros (Mini, Mini v4, Mini Flip), que não aguentam mais. 1200 é a do sistema. O jogo reinicia para trocar.",
     "ゲーム起動時のCPUクロック（MHz）。標準はMiyoo Mini Plusで1800、ほかの機種（Mini、Mini v4、Mini Flip）で1600。高いほど速いが、熱とバッテリー消費が増える。1200はシステム標準。再起動で反映。"),
@@ -554,6 +554,7 @@ UI = {
 "A = restart (the game goes on from where it is)": "A＝再起動（今の場面から続きます）",
 "B = cancel (the options go back as they were)": "B＝キャンセル（設定は元に戻ります）",
 "English": "英語", "Portuguese": "ポルトガル語", "Japanese": "日本語", "German": "ドイツ語", "French": "フランス語", "Italian": "イタリア語",
+"Spanish": "スペイン語",
 }
 
 UI.update({
@@ -623,7 +624,7 @@ EN_MENU = {
 "fast_magnified_textures": "On: textures seen up close, stretched over several pixels (sky, walls up close, fire, smoke), are read on half of the pixels; the ones in between are the average of their neighbors. Lighter, and the image looks almost the same. Off: every pixel, like before.",
 "lens_flare": "On: like the original. When you look at the sun, colored circles and a glare appear on screen (the reflection on the camera lens). Off: without them; the game runs lighter when looking at the sun, because the circles and the glare cover a good part of the screen with transparency.",
 "menu_theme": "Colors of this menu and of the short notices (state saved...): dark green and gold, or light (lime green, white and navy).",
-"language": "Language of the game and of this menu: English (original), Brazilian Portuguese (Zelda 64 BR fan translation), Japanese (the original Japanese text, also in the US cartridge), German or French (these two come from the European ROM: put the \"(Europe) (En,Fr,De) (Rev A)\" ROM, the .zip works too, in the game folder once) or Italian (Zelda 64 ITA fan translation by XXcentury). The game restarts to change it.",
+"language": "Language of the game and of this menu: English (original), Brazilian Portuguese (Zelda 64 BR fan translation), Japanese (the original Japanese text, also in the US cartridge), German or French (these two come from the European ROM: put the \"(Europe) (En,Fr,De) (Rev A)\" ROM, the .zip works too, in the game folder once) Italian (Zelda 64 ITA fan translation by XXcentury) or Spanish (fan translation by eduardo_a2j). The game restarts to change it.",
 "sleeping_waterfall": "Waterfall at the entrance of Zora's Domain. Always play the song: like the original, play Zelda's Lullaby every time. Play once: after the first time it stays open. Not needed: it opens by itself once you know the song and have an ocarina.",
 "retro_filter": "CRT TV look. Scanlines: dark lines between the lines of the picture. Scanlines + mask: also the red, green and blue column mask of a TV screen. With the filter, the game is drawn at 320x240 like the N64 and every game line takes 2 screen lines, so the filter's lines match the game's (the maximum resolution is not used). Since the lines darken the picture, turning it on raises the brightness by itself (3 with scanlines, 4 with the mask; you can still change it as usual), and turning it off brings back the brightness from before.",
 "retro_filter_strength": "How much the retro filter's lines (and mask) darken the picture: 25% to 75% (50 = default). Only with the filter on.",
@@ -658,6 +659,10 @@ EU, UI_EU, CH_EU = _eu["EU"], _eu["UI_EU"], _eu["CH_EU"]
 _it = {}
 exec(open(__file__.replace("oot-menu-textos.py", "oot-menu-it.py"), encoding="utf-8").read(), _it)
 IT, UI_IT, CH_IT = _it["IT"], _it["UI_IT"], _it["CH_IT"]
+# espanhol (tools/oot-menu-es.py)
+_es = {}
+exec(open(__file__.replace("oot-menu-textos.py", "oot-menu-es.py"), encoding="utf-8").read(), _es)
+ES, UI_ES, CH_ES = _es["ES"], _es["UI_ES"], _es["CH_ES"]
 
 
 def main():
@@ -676,18 +681,21 @@ def main():
     o = sys.stdout
     o.write("/* gerado por tools/oot-menu-textos.py: textos do menu de opcoes em portugues e japones (Shift-JIS), alemao, frances e italiano */\n")
     o.write("typedef struct {\n    const char* name;\n    const char* jp;\n    const char* pt_help;\n    const char* jp_help;\n"
-            "    const char *de, *de_help, *fr, *fr_help, *it, *it_help; /* (UTF-8) */\n} MenuTexto;\n\n")
+            "    const char *de, *de_help, *fr, *fr_help, *it, *it_help, *es, *es_help; /* (UTF-8) */\n} MenuTexto;\n\n")
     o.write("static const MenuTexto k_textos[] = {\n")
     for k, (jp, pth, jph) in T.items():
         de, deh, fr, frh = EU.get(k, ("", "", "", ""))
         it, ith = IT.get(k, ("", ""))
-        o.write("    { \"%s\", %s,\n      %s,\n      %s,\n      %s, %s,\n      %s, %s,\n      %s, %s },\n" %
+        es, esh = ES.get(k, ("", ""))
+        o.write("    { \"%s\", %s,\n      %s,\n      %s,\n      %s, %s,\n      %s, %s,\n      %s, %s,\n      %s, %s },\n" %
                 (k, c_str(jp), c_str(pth, "utf-8"), c_str(jph), c_str(de, "utf-8"), c_str(deh, "utf-8"),
-                 c_str(fr, "utf-8"), c_str(frh, "utf-8"), c_str(it, "utf-8"), c_str(ith, "utf-8")))
-    o.write("};\n\n/* textos fixos e avisos: ingles -> alemao, frances, italiano (UTF-8) */\n")
-    o.write("static const char* const k_ui_eu[][4] = {\n")
+                 c_str(fr, "utf-8"), c_str(frh, "utf-8"), c_str(it, "utf-8"), c_str(ith, "utf-8"),
+                 c_str(es, "utf-8"), c_str(esh, "utf-8")))
+    o.write("};\n\n/* textos fixos e avisos: ingles -> alemao, frances, italiano, espanhol (UTF-8) */\n")
+    o.write("static const char* const k_ui_eu[][5] = {\n")
     for k, (de, fr) in UI_EU.items():
-        o.write("    { %s, %s, %s, %s },\n" % (c_str(k), c_str(de, "utf-8"), c_str(fr, "utf-8"), c_str(UI_IT[k], "utf-8")))
+        o.write("    { %s, %s, %s, %s, %s },\n" % (c_str(k), c_str(de, "utf-8"), c_str(fr, "utf-8"), c_str(UI_IT[k], "utf-8"),
+                                                 c_str(UI_ES[k], "utf-8")))
     o.write("};\n\n/* textos fixos e avisos: ingles -> japones */\n")
     o.write("static const char* const k_ui_jp[][2] = {\n")
     for k, v in UI.items():
@@ -697,15 +705,16 @@ def main():
     for k, v in EN_MENU.items():
         o.write("    { \"%s\", %s },\n" % (k, c_str(v, "utf-8")))
     o.write("};\n\n/* opcoes de poucos valores: o nome de cada valor (ingles, portugues UTF-8, japones) */\n")
-    o.write("typedef struct {\n    const char* name;\n    int n;\n    const char *en[16], *pt[16], *jp[16], *de[16], *fr[16], *it[16];\n} MenuChoice;\n")
+    o.write("typedef struct {\n    const char* name;\n    int n;\n    const char *en[16], *pt[16], *jp[16], *de[16], *fr[16], *it[16], *es[16];\n} MenuChoice;\n")
     o.write("static const MenuChoice k_choices[] = {\n")
     for k, ch in CH.items():
         de, fr = CH_EU[k]
         it = CH_IT[k]
-        o.write("    { \"%s\", %d, { %s }, { %s }, { %s },\n      { %s }, { %s }, { %s } },\n" % (k, len(ch), ", ".join(c_str(c[0]) for c in ch),
+        es = CH_ES[k]
+        o.write("    { \"%s\", %d, { %s }, { %s }, { %s },\n      { %s }, { %s }, { %s }, { %s } },\n" % (k, len(ch), ", ".join(c_str(c[0]) for c in ch),
                 ", ".join(c_str(c[1], "utf-8") for c in ch), ", ".join(c_str(c[2]) for c in ch),
                 ", ".join(c_str(c, "utf-8") for c in de), ", ".join(c_str(c, "utf-8") for c in fr),
-                ", ".join(c_str(c, "utf-8") for c in it)))
+                ", ".join(c_str(c, "utf-8") for c in it), ", ".join(c_str(c, "utf-8") for c in es)))
     o.write("};\n\n/* as letras japonesas usadas (codigos Shift-JIS em ordem: busca binaria) */\n")
     o.write("static const unsigned short k_jp_glyphs[%d] = {\n" % len(glyphs))
     g = sorted(glyphs)
