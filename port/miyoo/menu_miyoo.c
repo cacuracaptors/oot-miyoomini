@@ -846,6 +846,7 @@ void miyoo_menu_key(int k) {
 
 static uint32_t* g_page;
 static int g_clipX0 = 0, g_clipX1 = W; /* letras so entre essas colunas */
+static int g_clipY0 = 0, g_clipY1 = H; /* e entre essas linhas (o cartao da descricao crescendo) */
 
 /* cores: dois esquemas (opcao menu_theme): 0 = verde escuro e dourado, 1 = claro (verde-limao, branco e azul-marinho) */
 typedef struct {
@@ -1226,6 +1227,9 @@ static int big(int x, int y, const char* s, uint32_t c) {
             const unsigned char* g = jp24((unsigned short)(p[0] << 8 | p[1]));
             if (g != NULL && x + 24 > g_clipX0 && x < g_clipX1) {
                 for (gy = 0; gy < 24; gy++) {
+                    if (y + 1 + gy < g_clipY0 || y + 1 + gy >= g_clipY1) {
+                        continue;
+                    }
                     for (gx = 0; gx < 24; gx++) {
                         if (x + gx >= g_clipX0 && x + gx < g_clipX1) {
                             px_a(x + gx, y + 1 + gy, c, g[gy * 24 + gx]);
@@ -1242,6 +1246,9 @@ static int big(int x, int y, const char* s, uint32_t c) {
             cw = k_fm_w[i];
             if (x + cw > g_clipX0 && x < g_clipX1) {
                 for (gy = 0; gy < FM_H; gy++) {
+                    if (y + gy < g_clipY0 || y + gy >= g_clipY1) {
+                        continue;
+                    }
                     for (gx = 0; gx < cw; gx++) {
                         if (x + gx >= g_clipX0 && x + gx < g_clipX1) {
                             px_a(x + gx, y + gy, c, g[gy * cw + gx]);
@@ -1530,7 +1537,7 @@ static int draw_value(const Item* it, int y, int isSel) {
  * por HELP_GROW_MS, o cartao cresce para cima, por cima da lista, ate caber o texto inteiro (sem rolagem automatica:
  * era dificil de ler); qualquer botao volta ao tamanho normal (miyoo_menu_key renova g_selAt) */
 #define HELP_GROW_MS 1000.0
-#define HELP_GROW_ANIM_MS 180.0
+#define HELP_GROW_ANIM_MS 320.0
 static void draw_help(const char* s) {
     static char lines[HELP_MAXL][256];
     const int n = help_split(s, W - 64, lines);
@@ -1542,28 +1549,32 @@ static void draw_help(const char* s) {
             chevron(W - 28, HELP_Y + HELP_H - 14, 6, 3, TH(accent));
         } else {
             /* cresce para cima (animado), o fundo do cartao no mesmo lugar */
-            const int full = n * HELP_LH + 10;
-            int h = full;
-            float k = (float)((t - HELP_GROW_MS) / HELP_GROW_ANIM_MS);
-            if (k < 1.0f) {
-                g_anim = 1;
-                h = HELP_H + (int)((float)(full - HELP_H) * k);
+            /* (o texto sobe junto com a borda de cima; as linhas de baixo aparecem aos poucos pela borda de baixo, que
+             * fica parada: as letras sao cortadas na altura do cartao) */
+            int full = n * HELP_LH + 10, h = full;
+            const float k = (float)((t - HELP_GROW_MS) / HELP_GROW_ANIM_MS);
+            if (full > HELP_Y + HELP_H - LIST_Y) {
+                full = HELP_Y + HELP_H - LIST_Y;
             }
-            if (HELP_Y + HELP_H - h < LIST_Y) {
-                h = HELP_Y + HELP_H - LIST_Y;
+            h = full;
+            if (k < 1.0f) {
+                const float e = 1.0f - (1.0f - k) * (1.0f - k) * (1.0f - k); /* (sai rapido e freia no fim) */
+                g_anim = 1;
+                h = HELP_H + (int)((float)(full - HELP_H) * e + 0.5f);
             }
             y0 = HELP_Y + HELP_H - h;
             shadow(10, y0, W - 20, h, 14);
             rrect(10, y0, W - 20, h, 14, TH(help), 255);
-            shown = (h - 10) / HELP_LH;
-            if (shown > n) {
-                shown = n;
-            }
+            shown = n;
+            g_clipY0 = y0 + 2;
+            g_clipY1 = HELP_Y + HELP_H - 2;
         }
     }
     for (i = 0; i < shown; i++) {
         big(24, y0 + 6 + i * HELP_LH, lines[i], TH(helpText));
     }
+    g_clipY0 = 0;
+    g_clipY1 = H;
 }
 
 /* dica do rodape: uma "tecla" (pilula com o nome do botao) e o que ela faz; devolve o x do fim */
