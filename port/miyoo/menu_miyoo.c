@@ -86,6 +86,7 @@ static const Item k_items[] = {
     /* teclas personalizaveis (lote 197): no fim da aba, debaixo de um titulo (linha "#": so o titulo, nao se escolhe);
      * toque e segurado de cada botao (input_miyoo.c); o nome vem de key_label */
     { TAB_CONTROLS, "#keys", "Buttons: tap and hold", "Teclas: toque e segurar", -1, -1, 0, 0 },
+    R(TAB_CONTROLS, "button_hold_ms", "Hold time (ms)", "Tempo para segurar (ms)", 150, 600, 50),
     R(TAB_CONTROLS, "button_a_tap", "", "", 0, 12, 1),
     R(TAB_CONTROLS, "button_a_hold", "", "", 0, 12, 1),
     R(TAB_CONTROLS, "button_b_tap", "", "", 0, 12, 1),
@@ -364,17 +365,17 @@ static const char* item_help(const Item* it) {
     if (!strncmp(it->name, "button_", 7)) {
         const char* u = strrchr(it->name, '_');
         if (u != NULL && !strcmp(u, "_hold")) {
-            return tr("What this button does when held for half a second or more; it lasts while the button stays pressed "
+            return tr("What this button does when held for the hold time or more; it lasts while the button stays pressed "
                       "(walk slowly, shield...). When tap and hold do the same thing, the button works at once, like a "
                       "normal button.",
-                      "O que este botão faz segurado por meio segundo ou mais; vale enquanto ele continuar apertado (andar "
-                      "devagar, escudo...). Quando o toque e o segurar fazem a mesma coisa, o botão vale na hora, como um "
-                      "botão comum.");
+                      "O que este botão faz segurado pelo tempo para segurar ou mais; vale enquanto ele continuar apertado "
+                      "(andar devagar, escudo...). Quando o toque e o segurar fazem a mesma coisa, o botão vale na hora, "
+                      "como um botão comum.");
         }
-        return tr("What a quick tap on this button does: pressed and released within half a second, with no other "
+        return tr("What a quick tap on this button does: pressed and released before the hold time, with no other "
                   "button. When tap and hold do the same thing, the button works at once, like a normal button. Shortcuts "
                   "with SELECT held (brightness, minimap, tunic and boots) don't change.",
-                  "O que um toque rápido neste botão faz: apertado e solto em menos de meio segundo, sem outro botão "
+                  "O que um toque rápido neste botão faz: apertado e solto antes do tempo para segurar, sem outro botão "
                   "junto. Quando o toque e o segurar fazem a mesma coisa, o botão vale na hora, como um botão comum. Os "
                   "atalhos com SELECT segurado (brilho, minimapa, túnica e botas) não mudam.");
     }

@@ -147,7 +147,8 @@ When you update the port to a new version, just replace the files: the game data
 | Menu | Game Switcher / back to OnionOS / previous game, as set in OnionOS Tweaks (the state is saved first) |
 
 Every button except Menu can be changed in Menu+Start > Controls, with one action for a quick tap and another
-for holding it (half a second or more). A button with the same action for both works at once, like a normal
+for holding it (a quarter of a second or more,
+adjustable). A button with the same action for both works at once, like a normal
 button. "Default buttons" brings back the layout above. The Select+button shortcuts don't change.
 ### Playing the ocarina
 

@@ -60,11 +60,19 @@ enum { ACT_NONE, ACT_A, ACT_B, ACT_JUMP, ACT_Z, ACT_R, ACT_L, ACT_START, ACT_CUP
        ACT_COUNT };
 #define NBTN 10
 static const int k_btnKey[NBTN] = { K_A, K_B, K_X, K_Y, K_L1, K_R1, K_L2, K_R2, K_START, K_SELECT }; /* (ordem das opcoes) */
-#define BTN_HOLD_MS 500  /* segurado a partir daqui; antes disso (e solto) e um toque (o SELECT do port do Fallout) */
-#define BTN_PULSE_MS 120 /* o toque fica apertado para o jogo esse tempo (ele le os controles a 20 Hz) */
+/* opcao button_hold_ms (port_options.c): segurado a partir daqui; antes disso (e solto) e um toque. Comecou com os
+ * 500 ms do SELECT do port do Fallout, mas aqui o jogo e mais rapido (lote 199: 250) */
+extern int port_opt_btn_hold_ms;
+/* um toque vira um aperto para o jogo: apertado ate o jogo rodar um quadro com ele (Play_Update anota em
+ * port_jump_stamp, a cada quadro, o numero da leitura: z_play.c) e pelo menos BTN_PULSE_MIN_MS; depois solto do mesmo
+ * jeito, antes do proximo toque. Fora do jogo (sem quadros anotados) vale o tempo maximo. Toques rapidos seguidos
+ * entram numa fila: antes viravam um aperto so, comprido (B seguidos = ataque giratorio carregado) */
+#define BTN_PULSE_MIN_MS 40
+#define BTN_PULSE_MAX_MS 120
+#define BTN_QUEUE_MAX 4
 typedef struct {
-    long long t0, pulseUntil;
-    int was, combo, holding, pulseAct;
+    long long t0, phaseT0;
+    int was, combo, holding, pulseAct, pending, phase, phaseRead, phaseStamp; /* phase: 0 nada, 1 apertado, 2 solto antes do proximo */
 } BtnState;
 static BtnState g_btn[NBTN];
 static int btn_act(int v) {
@@ -282,10 +290,10 @@ static void read_pads(OSContPad pads[4]) {
     miyoo_rumble_tick();  /* (o motor nunca fica ligado mais de 3 s seguidos) */
 
     /* teclas personalizaveis (opcoes button_*_tap / button_*_hold, port_options.c; menu Controles): cada botao (A, B, X,
-     * Y, L1, R1, L2, R2, START, SELECT) tem uma acao no toque e outra segurado. Toque = solto antes de BTN_HOLD_MS e sem
-     * outro botao junto: a acao vai ao jogo ao soltar, por BTN_PULSE_MS (o jogo le os controles a 20 Hz). Segurado =
-     * BTN_HOLD_MS ou mais: a acao vale enquanto o botao estiver apertado. E o tempo do SELECT do port do Fallout (toque =
-     * Esc, segurado = modificador). Com a mesma acao nos dois, o botao vale na hora, como um botao comum (sem espera).
+     * Y, L1, R1, L2, R2, START, SELECT) tem uma acao no toque e outra segurado. Toque = solto antes de button_hold_ms e
+     * sem outro botao junto: a acao vai ao jogo ao soltar, como um aperto de um quadro do jogo (BTN_PULSE_*). Segurado =
+     * button_hold_ms ou mais: a acao vale enquanto o botao estiver apertado. Com a mesma acao nos dois, o botao vale na
+     * hora, como um botao comum (sem espera).
      * Um botao usado numa combinacao (com o MENU, ou o SELECT com outro botao) nao faz nada sozinho.
      * O pulo (acao 3) so pula durante o jogo (o jogo avisa em port_jump_mode, a cada quadro, quando Link pode agir:
      * fora do menu de pausa e sem caixa de texto); nos menus, textos e telas fora do jogo ele e o B do N64 (cancelar,
@@ -293,6 +301,7 @@ static void read_pads(OSContPad pads[4]) {
     {
         const long long now = mono_ms();
         unsigned act = 0; /* (1 << ACT_*): as acoes ativas agora */
+        const int holdMs = port_opt_btn_hold_ms < 100 ? 100 : port_opt_btn_hold_ms;
         int i, inPlay;
         port_input_frames++;
         port_opt_manual_jump = 0;
@@ -328,19 +337,41 @@ static void read_pads(OSContPad pads[4]) {
                         act |= 1u << t;
                     }
                 } else {
-                    if (!s->combo && now - s->t0 >= BTN_HOLD_MS) {
+                    if (!s->combo && now - s->t0 >= holdMs) {
                         s->holding = 1;
                     }
                     if (s->holding && !selCombo) {
                         act |= 1u << h;
                     }
                 }
-            } else if (s->was && t != h && !s->combo && !s->holding && now - s->t0 < BTN_HOLD_MS) {
-                s->pulseAct = t; /* toque */
-                s->pulseUntil = now + BTN_PULSE_MS;
+            } else if (s->was && t != h && !s->combo && !s->holding && now - s->t0 < holdMs) {
+                if (s->pending < BTN_QUEUE_MAX) {
+                    s->pending++; /* toque */
+                }
+                s->pulseAct = t;
             }
             s->was = held[k];
-            if (now < s->pulseUntil) {
+            if (s->phase != 0) {
+                /* a fase acaba quando o jogo ja rodou um quadro depois do comeco dela (e passou o minimo), ou no maximo.
+                 * (o PadMgr le os controles a cada retraco, 60 Hz; o quadro do jogo, a 20 Hz, pega a ultima leitura: o
+                 * quadro anotado com uma leitura depois da do comeco da fase certamente ja viu a fase) */
+                const long long el = now - s->phaseT0;
+                if (el >= BTN_PULSE_MAX_MS || (el >= BTN_PULSE_MIN_MS && port_jump_stamp - s->phaseRead >= 1 &&
+                                               port_jump_stamp != s->phaseStamp)) {
+                    s->phase = s->phase == 1 ? 2 : 0;
+                    s->phaseT0 = now;
+                    s->phaseRead = port_input_frames;
+                    s->phaseStamp = port_jump_stamp;
+                }
+            }
+            if (s->phase == 0 && s->pending > 0) {
+                s->pending--;
+                s->phase = 1;
+                s->phaseT0 = now;
+                s->phaseRead = port_input_frames;
+                s->phaseStamp = port_jump_stamp;
+            }
+            if (s->phase == 1) {
                 act |= 1u << s->pulseAct;
             }
         }

@@ -93,6 +93,7 @@ int port_tt_novoid; /* (codigo do jogo: viagem no tempo sem o dano da queda) */
 
 /* teclas personalizaveis (opcoes button_*_tap / _hold; port/miyoo/input_miyoo.c): por botao (A, B, X, Y, L1, R1, L2, R2,
  * START, SELECT) a acao do toque e a de segurar. Os valores iniciais sao os da tabela k_padrao */
+int port_opt_btn_hold_ms = 250; /* a partir de quanto tempo o botao conta como segurado */
 int port_opt_btn[20] = { 1, 1, 3, 3, 9, 9, 2, 2, 4, 4, 5, 5, 10, 10, 11, 12, 7, 7, 8, 0 };
 /* as opcoes antigas manual_jump, jump_on_b e slow_walk (ate o lote 196): so lidas de um options.txt antigo, para
  * montar as teclas iguais (port_options_load) */
@@ -237,8 +238,10 @@ static const struct {
     { "Controls", "smooth_aiming", "mira_suave", &port_opt_mira_suave,
       "1 = when aiming and in first person the D-pad accelerates gradually (a tap moves a little, holding speeds up); 0 = like the original" },
     /* teclas personalizaveis (port/miyoo/input_miyoo.c): o que cada botao faz num toque e segurado (lote 197) */
+    { "Controls", "button_hold_ms", "", &port_opt_btn_hold_ms,
+      "buttons with a different action for tap and hold (button_*): held this many ms or more counts as hold; released before that, as a tap (250 = default)" },
     { "Controls", "button_a_tap", "", &port_opt_btn[0],
-      "what each button does. button_N_tap: a quick tap (released within half a second, without another button with it); button_N_hold: held half a second or more. 0 = nothing, 1 = A, 2 = B (sword), 3 = jump (B in menus, text boxes and outside gameplay), 4 = Z (target), 5 = R (shield), 6 = L (minimap), 7 = START, 8 = C-Up, 9 = C-Down, 10 = C-Left, 11 = C-Right, 12 = walk slowly. The same number for tap and hold = the button works at once, like a normal button (no waiting). SELECT+another button are the fixed shortcuts (brightness, minimap, tunic/boots...), and MENU is not changeable" },
+      "what each button does. button_N_tap: a quick tap (released before button_hold_ms, without another button with it); button_N_hold: held longer. 0 = nothing, 1 = A, 2 = B (sword), 3 = jump (B in menus, text boxes and outside gameplay), 4 = Z (target), 5 = R (shield), 6 = L (minimap), 7 = START, 8 = C-Up, 9 = C-Down, 10 = C-Left, 11 = C-Right, 12 = walk slowly. The same number for tap and hold = the button works at once, like a normal button (no waiting). SELECT+another button are the fixed shortcuts (brightness, minimap, tunic/boots...), and MENU is not changeable" },
     { "Controls", "button_a_hold", "", &port_opt_btn[1],
       "A held (see button_a_tap)" },
     { "Controls", "button_b_tap", "", &port_opt_btn[2],
@@ -759,6 +762,7 @@ static const struct {
     { "rumble", 1 },
     { "natural_aiming", 1 },
     { "smooth_aiming", 1 },
+    { "button_hold_ms", 250 },
     { "button_a_tap", 1 },
     { "button_a_hold", 1 },
     { "button_b_tap", 3 },

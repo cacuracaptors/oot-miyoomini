@@ -4,6 +4,8 @@
 # dell'Agonia, Vento di Farore, Amore di Nayru, Boschi Perduti, Tempio dell'Ombra...
 
 IT = {
+    "button_hold_ms": ("Tempo per tenuto (ms)",
+                       "Per i tasti con azioni diverse per tocco e tenuto: premuto per questo tempo o più conta come tenuto; rilasciato prima, come tocco (250 = predefinito)."),
     "language": ("Lingua (riavvia)",
                  "Lingua del gioco e di questo menu: inglese (originale), portoghese brasiliano (traduzione amatoriale Zelda 64 BR), giapponese (il testo giapponese originale, presente anche nella cartuccia americana), tedesco o francese (questi due vengono dalla ROM europea: mettete una volta la ROM \"(Europe) (En,Fr,De) (Rev A)\", anche in .zip, nella cartella del gioco) o italiano (traduzione amatoriale Zelda 64 ITA di XXcentury, 2001). Il gioco si riavvia per cambiarla."),
     "cpu_clock": ("Frequenza CPU (MHz, riavvia)",
@@ -388,8 +390,8 @@ UI_IT = {
     'hold': 'tenuto',
     'Default buttons': 'Tasti predefiniti',
     'Buttons: tap and hold': 'Tasti: tocco e tenuto',
-    "What a quick tap on this button does: pressed and released within half a second, with no other button. When tap and hold do the same thing, the button works at once, like a normal button. Shortcuts with SELECT held (brightness, minimap, tunic and boots) don't change.": 'Cosa fa un tocco rapido su questo tasto: premuto e rilasciato entro mezzo secondo, senza altri tasti. Quando tocco e tenuto fanno la stessa cosa, il tasto risponde subito, come un tasto normale. Le scorciatoie con SELECT tenuto (luminosità, minimappa, tunica e stivali) non cambiano.',
-    'What this button does when held for half a second or more; it lasts while the button stays pressed (walk slowly, shield...). When tap and hold do the same thing, the button works at once, like a normal button.': 'Cosa fa questo tasto tenuto premuto per mezzo secondo o più; dura finché resta premuto (camminare piano, scudo...). Quando tocco e tenuto fanno la stessa cosa, il tasto risponde subito, come un tasto normale.',
+    "What a quick tap on this button does: pressed and released before the hold time, with no other button. When tap and hold do the same thing, the button works at once, like a normal button. Shortcuts with SELECT held (brightness, minimap, tunic and boots) don't change.": 'Cosa fa un tocco rapido su questo tasto: premuto e rilasciato prima del tempo per tenuto, senza altri tasti. Quando tocco e tenuto fanno la stessa cosa, il tasto risponde subito, come un tasto normale. Le scorciatoie con SELECT tenuto (luminosità, minimappa, tunica e stivali) non cambiano.',
+    'What this button does when held for the hold time or more; it lasts while the button stays pressed (walk slowly, shield...). When tap and hold do the same thing, the button works at once, like a normal button.': 'Cosa fa questo tasto tenuto premuto per il tempo per tenuto o più; dura finché resta premuto (camminare piano, scudo...). Quando tocco e tenuto fanno la stessa cosa, il tasto risponde subito, come un tasto normale.',
     "Every button goes back to the port's layout: B jump, Y sword, L2 / X / R2 C-Left / C-Down / C-Right (R2 held: walk slowly), SELECT tap C-Up, L1 Z, R1 R. Press A twice.": 'Tutti i tasti tornano alla disposizione del port: B salto, Y spada, L2 / X / R2 C-sinistra / C-giù / C-destra (R2 tenuto: camminare piano), tocco su SELECT C-su, L1 Z, R1 R. Premete A due volte.',
 }
 

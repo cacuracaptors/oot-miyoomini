@@ -9,6 +9,9 @@ import sys
 
 # nome: (rotulo japones, descricao em portugues, descricao em japones)
 T = {
+"button_hold_ms": ("長押しの時間（ミリ秒）",
+    "Para os botões com ações diferentes no toque e no segurar: segurado por esse tempo ou mais conta como segurar; solto antes, como toque (250 = padrão).",
+    "押すと長押しの動作が違うボタン：この時間以上押し続けると長押し、それより前に離すと短く押したことになります（250＝標準）。"),
 "menu_theme": ("メニューの色",
     "Cores deste menu e dos avisos curtos (estado salvo...): verde escuro e dourado, ou claro (verde-limão, branco e azul-marinho).",
     "このメニューと短い通知の色：深緑と金、または明るい色（黄緑、白、紺）。"),
@@ -567,8 +570,8 @@ UI.update({
 'hold': '長押し',
 'Default buttons': 'ボタンを初期設定に',
 'Buttons: tap and hold': 'ボタン：押す／長押し',
-"What a quick tap on this button does: pressed and released within half a second, with no other button. When tap and hold do the same thing, the button works at once, like a normal button. Shortcuts with SELECT held (brightness, minimap, tunic and boots) don't change.": 'このボタンを短く押したとき（0.5秒以内に離す、ほかのボタンなし）の動作。押すと長押しが同じなら、普通のボタンのようにすぐ反応します。SELECTを押しながらのショートカット（明るさ、ミニマップ、服とブーツ）は変わりません。',
-'What this button does when held for half a second or more; it lasts while the button stays pressed (walk slowly, shield...). When tap and hold do the same thing, the button works at once, like a normal button.': 'このボタンを0.5秒以上押し続けたときの動作。押している間ずっと続きます（ゆっくり歩く、盾…）。押すと長押しが同じなら、普通のボタンのようにすぐ反応します。',
+"What a quick tap on this button does: pressed and released before the hold time, with no other button. When tap and hold do the same thing, the button works at once, like a normal button. Shortcuts with SELECT held (brightness, minimap, tunic and boots) don't change.": 'このボタンを短く押したとき（長押しの時間より前に離す、ほかのボタンなし）の動作。押すと長押しが同じなら、普通のボタンのようにすぐ反応します。SELECTを押しながらのショートカット（明るさ、ミニマップ、服とブーツ）は変わりません。',
+'What this button does when held for the hold time or more; it lasts while the button stays pressed (walk slowly, shield...). When tap and hold do the same thing, the button works at once, like a normal button.': 'このボタンを長押しの時間以上押し続けたときの動作。押している間ずっと続きます（ゆっくり歩く、盾…）。押すと長押しが同じなら、普通のボタンのようにすぐ反応します。',
 "Every button goes back to the port's layout: B jump, Y sword, L2 / X / R2 C-Left / C-Down / C-Right (R2 held: walk slowly), SELECT tap C-Up, L1 Z, R1 R. Press A twice.": 'すべてのボタンを初期設定に戻します：Bジャンプ、Y剣、L2／X／R2＝C左／C下／C右（R2長押し：ゆっくり歩く）、SELECTを押す＝C上、L1＝Z、R1＝R。Aを2回押してください。',
 })
 
