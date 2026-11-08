@@ -371,6 +371,9 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "--sem-fundo-misto")) {
             extern int gx_bgmix;
             gx_bgmix = 0;
+        } else if (!strcmp(argv[i], "--sem-alias")) {
+            extern int gx_cc_alias;
+            gx_cc_alias = 0;
         } else if (!strcmp(argv[i], "--extras")) {
             g_simExtra = 1;
         } else if (!strcmp(argv[i], "--mistura-desliza") && i + 1 < argc) {

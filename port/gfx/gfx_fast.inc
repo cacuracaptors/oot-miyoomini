@@ -441,6 +441,7 @@ int gx_ceu_mistura = 1;
  * suave). Refeita quando o deslocamento muda (todo quadro, enquanto desliza). Opcao gx_mistura_desliza
  * (options.txt premix_scrolling: 1 = ate 64x64, a agua; 2 = ate 128x128, tambem o fundo do lago, que mistura uma
  * textura 4x maior; replay --sem-mistura-desliza / --mistura-desliza N). */
+int gx_cc_alias = 1; /* (lote 190: 1o ciclo que so copia uma entrada lido direto pelo 2o; replay --sem-alias) */
 int gx_mistura_desliza = 2; /* (padrao 2 desde o lote 188: medido no lago Hylia, 384 -> 416 com o mesmo tempo) */
 typedef struct {
     int sizeS, sizeT;   /* textura misturada */
@@ -2348,25 +2349,40 @@ static void fused_check(FastProg *f) {
         }
         if (f->useT[0]) perPix |= 0xFu << V_T0;
         if (f->useT[1]) perPix |= 0xFu << V_T1;
+        /* Lote 190: canal do 1o ciclo que so copia uma entrada (k0: (A - A) * C + D ou C = 0) nao vira operacao: o 2o
+         * ciclo le direto a entrada (a copia e o "COMBINED" deixam de existir). Era o caso do ceu e das texturas
+         * pre-misturadas (agua, chao com reflexo): sem isso a copia levava o pixel inteiro para o interpretador
+         * (KERN_GEN) em vez de um kernel pronto. Mesmas contas. */
+        uint8_t alias[V_N + 4];
+        for (k = 0; k < V_N + 4; k++) {
+            alias[k] = (uint8_t)k;
+        }
         if (f->cyc2) {
             for (k = 0; k < 4; k++) {
                 const uint8_t *c = f->c0[k];
                 if (f->need0[k]) {
-                    perPix |= 1u << (V_COMB + k);
-                    if (f->k0[k]) {
+                    if (f->k0[k] && gx_cc_alias && !(c[3] >= V_COMB && c[3] < V_COMB + 4)) {
+                        alias[V_COMB + k] = c[3];
+                    } else if (f->k0[k]) {
+                        perPix |= 1u << (V_COMB + k);
                         ops[n].kind = 0;
                         ops[n].dst = (uint8_t)(V_COMB + k);
                         ops[n].a = ops[n].b = ops[n].c = V_ZERO;
                         ops[n].d = c[3];
                         n++;
                     } else {
+                        perPix |= 1u << (V_COMB + k);
                         fused_op(&ops[n++], V_COMB + k, c);
                     }
                 }
             }
         }
         for (k = 0; k < 4; k++) {
-            const uint8_t *c = f->c1[k];
+            uint8_t c[4];
+            int i2;
+            for (i2 = 0; i2 < 4; i2++) {
+                c[i2] = alias[f->c1[k][i2]];
+            }
             if (!f->need1[k]) {
                 f->fcc[k] = V_ZERO;
             } else if (f->k1[k]) {
