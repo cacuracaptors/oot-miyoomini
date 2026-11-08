@@ -889,19 +889,24 @@ extern int port_opt_menu_theme; /* opcao menu_theme (port_options.c) */
 static const MenuTheme* g_th = &k_themes[0];
 #define TH(f) (g_th->f)
 
+/* tamanho da pagina em que se desenha: o menu e sempre 640x480; o aviso por cima do jogo vai na pagina da tela, que no
+ * Mini v4 / Mini Flip e de 752x560 (video_miyoo.c) */
+static int g_pgW = W, g_pgH = H;
+extern int miyoo_panel_w, miyoo_panel_h;
+
 static inline uint32_t* px_ptr(int x, int y) {
-    return &g_page[(size_t)(H - 1 - y) * W + (W - 1 - x)]; /* painel girado 180 graus */
+    return &g_page[(size_t)(g_pgH - 1 - y) * g_pgW + (g_pgW - 1 - x)]; /* painel girado 180 graus */
 }
 
 static inline void px(int x, int y, uint32_t c) {
-    if ((unsigned)x < W && (unsigned)y < H) {
+    if ((unsigned)x < (unsigned)g_pgW && (unsigned)y < (unsigned)g_pgH) {
         *px_ptr(x, y) = c;
     }
 }
 
 /* mistura c com o que ja esta no pixel (a = 0..255) */
 static inline void px_a(int x, int y, uint32_t c, int a) {
-    if ((unsigned)x < W && (unsigned)y < H && a > 0) {
+    if ((unsigned)x < (unsigned)g_pgW && (unsigned)y < (unsigned)g_pgH && a > 0) {
         uint32_t* d = px_ptr(x, y);
         if (a >= 255) {
             *d = c;
@@ -1113,17 +1118,23 @@ void miyoo_menu_draw_toast(uint32_t* page, const char* s) {
         jp |= sjis_lead((unsigned char)s[i]);
     }
     g_page = page;
+    g_pgW = miyoo_panel_w;
+    g_pgH = miyoo_panel_h;
+    g_clipX1 = g_pgW;
     g_th = &k_themes[port_opt_menu_theme == 1 ? 1 : 0];
     scale = jp ? 1 : 2;
     w = miyoo_menu_text_width(s) * scale;
     bh = 16 * scale + 16;
     bw = w + 56;
-    x0 = (W - bw) / 2;
+    x0 = (g_pgW - bw) / 2;
     rrect(x0, 10, bw, bh, bh / 2, TH(toastBg), 255); /* (pilula; so os cantos leem a tela) */
     circle((float)(x0 + 22), (float)(10 + bh / 2), 6.0f, TH(accent), 255);
     g_scale = scale;
     text(x0 + 38, 18, s, TH(toastText));
     g_scale = 1;
+    g_pgW = W;
+    g_pgH = H;
+    g_clipX1 = W;
 }
 
 /* ---- letras grandes suavizadas (o menu) ---- */

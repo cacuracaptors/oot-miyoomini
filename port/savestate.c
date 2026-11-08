@@ -425,7 +425,7 @@ static int read_state(const char* path, uint8_t** out, size_t* outLen) {
         fclose(f);
         return -1;
     }
-    if (h.pbgLen != h.pbgW * h.pbgH * 2u || h.pbgLen > 640u * 480u * 2u) {
+    if (h.pbgLen != h.pbgW * h.pbgH * 2u || h.pbgLen > 752u * 560u * 2u) {
         fclose(f);
         return -1;
     }

@@ -180,9 +180,23 @@ static FastProg g_fp;
 
 /* Fundo adiado (ceu, cor de fundo): ver bg_pre. Uma mascara de bytes por pixel da tela: 0xFF = algum
  * desenho posterior ja escreveu ali. Linhas com folga de 16 bytes (os grupos de 8 passam do fim). */
-#define COV_W 656 /* ate 640 (resolucao maior) + 16 */
-#define COV_H 480
-static uint8_t g_cov[COV_H][COV_W] __attribute__((aligned(16)));
+#define COV_W 768 /* ate 752 (resolucao maior na tela de 752x560) + 16 */
+#define COV_H 560
+/* (memoria comum, nao estatica: o executavel tem de acabar antes de 0x81000000; alocada no 1o fundo adiado) */
+static uint8_t (*g_cov)[COV_W];
+
+static int cov_alloc(void) {
+    uint8_t *p;
+    if (g_cov != NULL) {
+        return 1;
+    }
+    p = (uint8_t *)calloc(1, (size_t)COV_H * COV_W + 16u);
+    if (p == NULL) {
+        return 0;
+    }
+    g_cov = (uint8_t (*)[COV_W])(void *)(((uintptr_t)p + 15u) & ~(uintptr_t)15u); /* (16 bytes: NEON) */
+    return 1;
+}
 
 static float shift_scale(int sh) {
     if (sh == 0) {
@@ -3951,6 +3965,9 @@ static int bg_pre(const FastProg *f, int useZ, int ys, int ye) {
         }
     }
 #endif
+    if (gx_bgdefer && g_cov == NULL && !cov_alloc()) {
+        gx_bgdefer = 0; /* (sem memoria: sem o fundo adiado) */
+    }
     compat = gx_bgdefer && f->fused && !f->needMem && f->cimg == g_bgCimg && f->cwidth <= COV_W - 16 && ye < COV_H;
     /* camadas do fundo que misturam com o que ja esta na tela (nuvens por cima do ceu) tambem ficam
      * guardadas, desde que venham logo depois do primeiro trabalho do fundo: no fim da janela elas sao

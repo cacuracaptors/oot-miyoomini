@@ -39,11 +39,48 @@ double gx_hr_fixo_ms = 3.0; /* parte do desenho que nao depende da resolucao (ve
 /* degraus de 32 pixels de largura (cerca de 10% de pixels cada): com degraus grandes (640, 560, 480, 400)
  * o desenho ficava bem abaixo do alvo (o degrau de cima nao cabia) e os nucleos sobravam */
 #define HR_LV 11
-static const int k_lvW[HR_LV] = { 640, 608, 576, 544, 512, 480, 448, 416, 384, 352, 320 };
-#define HR_MAXW 640
-#define HR_MAXH 480
+static int k_lvW[HR_LV] = { 640, 608, 576, 544, 512, 480, 448, 416, 384, 352, 320 };
+/* tela de 752x560 (Mini v4, Mini Flip; gx_hr_set_panel): degraus ate o tamanho da tela. A imagem tem o formato da tela
+ * (altura = largura * 560 / 752) e a escala e a mesma nos dois sentidos (largura / 320): a imagem do N64 sai inteira na
+ * largura e perde ~1,7 linha do N64 embaixo (0,7%). Com o filtro retro: 376x280 fixo, cada linha do jogo em 2 da tela */
+static const int k_lvW560[HR_LV] = { 752, 712, 672, 632, 592, 552, 512, 464, 416, 376, 320 };
+#define RETRO560_W 376
+static int g_maxW = 640, g_maxH = 480; /* maior imagem (buffers) */
+#define HR_MAXW g_maxW
+#define HR_MAXH g_maxH
 #define FB_W 320
 #define FB_H 240
+int gx_hr_pan560; /* tela de 752x560 */
+
+void gx_hr_set_panel(int w, int h) {
+    if (w == 752 && h == 560) {
+        int i;
+        for (i = 0; i < HR_LV; i++) {
+            k_lvW[i] = k_lvW560[i];
+        }
+        g_maxW = 752;
+        g_maxH = 560;
+        gx_hr_pan560 = 1;
+        fprintf(stderr, "[resolucao] tela de 752x560: desenho ate 752x560 (filtro retro: 376x280)\n");
+    }
+}
+
+/* bytes da maior imagem (gfx_hook.c: imagens da fila) */
+size_t gx_hr_img_bytes(void) {
+    return (size_t)g_maxW * (size_t)g_maxH * 2u + 64u;
+}
+
+/* altura da imagem para uma largura */
+static int pass_h(int w) {
+    return gx_hr_pan560 ? (w * 560 + 376) / 752 : w * 3 / 4;
+}
+
+/* linha da imagem maior (w x h) que corresponde a linha y do N64: a escala e w / 320 tambem na altura */
+static int src_row(int y, int w, int h) {
+    const int hc = w * 3 / 4; /* (altura que a imagem teria inteira; = h fora da tela de 752x560) */
+    const int r = (y * hc + hc / 2) / FB_H;
+    return r < h ? r : h - 1;
+}
 
 typedef struct {
     const uint8_t *ram; /* framebuffer do jogo (tela) */
@@ -190,7 +227,7 @@ static uint16_t zbuf_at(int x, int y) {
     x = x < 0 ? 0 : (x >= FB_W ? FB_W - 1 : x);
     y = y < 0 ? 0 : (y >= FB_H ? FB_H - 1 : y);
     sx = (x * g_zW + g_zW / 2) / FB_W;
-    sy = (y * g_zH + g_zH / 2) / FB_H;
+    sy = src_row(y, g_zW, g_zH);
     return ((const uint16_t *)g_zBuf)[(size_t)sy * (size_t)g_zW + (size_t)sx];
 }
 
@@ -567,8 +604,8 @@ void gx_hr_text(int begin, int x0, int y0, int x1, int y1) {
     {
         /* o fundo da caixa: a imagem maior deste desenho, ou a tela do N64 quando o desenho e em 320 */
         HrSlot *t = slot_of(gx.cimgRaw);
-        if (g_tOn || !gx_hr_texto || gx_hr_max <= FB_W || gx_capturing || t == NULL || gx.cimg.siz != 2 ||
-            gx.cimgRawW != FB_W) {
+        if (g_tOn || !gx_hr_texto || gx_hr_pan560 || gx_hr_max <= FB_W || gx_capturing || t == NULL || gx.cimg.siz != 2 ||
+            gx.cimgRawW != FB_W) { /* (caixa nitida: so na tela de 640x480, ela e montada em 640) */
             g_tStat[3]++;
             return;
         }
@@ -706,7 +743,7 @@ static void reduce(const uint8_t *src, int w, int h, uint8_t *dst, int le) {
         xo[x] = (uint16_t)((x * w + w / 2) / FB_W);
     }
     for (y = 0; y < FB_H; y++) {
-        const uint16_t *s = (const uint16_t *)(src + (size_t)((y * h + h / 2) / FB_H) * (size_t)w * 2u);
+        const uint16_t *s = (const uint16_t *)(src + (size_t)src_row(y, w, h) * (size_t)w * 2u);
         uint16_t *d = (uint16_t *)(dst + (size_t)y * FB_W * 2u);
         if (w == 2 * FB_W) {
             x = 0;
@@ -775,7 +812,12 @@ void gx_hr_menu_mark(int open) {
 /* a resolucao e a caixa de texto em uso, a partir das opcoes (o filtro retro prende as duas em 320x240) */
 void gx_hr_sync_opts(void) {
     extern int gx_texto_320, gx_texto_320_opt; /* gfx_ge.c */
-    gx_hr_max = gx_retro ? FB_W : gx_hr_max_opt;
+    if (gx_hr_pan560) {
+        /* tela de 752x560: a opcao no maximo (640) vale o tamanho da tela; o filtro retro fica em 376x280 */
+        gx_hr_max = gx_retro ? RETRO560_W : gx_hr_max_opt >= 640 ? 752 : gx_hr_max_opt;
+    } else {
+        gx_hr_max = gx_retro ? FB_W : gx_hr_max_opt;
+    }
     gx_texto_320 = gx_retro ? 1 : gx_texto_320_opt;
 }
 
@@ -791,8 +833,8 @@ void gx_hr_pass_begin(void) {
     { static int e = -1; if (e < 0) { e = getenv("OOT_RES_FIXA") != NULL; } if (e) { gx_hr_fixo = 1; } }
     if (gx_hr_max <= FB_W || gx_capturing) {
         g_lv = HR_LV - 1;
-    } else if (g_lv < lvMax || gx_hr_fixo) {
-        g_lv = lvMax;
+    } else if (g_lv < lvMax || gx_hr_fixo || (gx_hr_pan560 && gx_retro)) {
+        g_lv = lvMax; /* (filtro retro na tela de 752x560: sempre 376x280, as linhas casam com as do filtro) */
     }
     /* menu de pausa: enquanto o fundo guardado e desenhado, o tamanho fica o dele (copia exata, sem ampliar) */
     g_pbgUsedLast = g_pbgUsed;
@@ -807,7 +849,7 @@ void gx_hr_pass_begin(void) {
      * leve na resolucao original. Vale a partir do desenho seguinte ao que mostrou o menu; o controle de resolucao nao
      * conta esses desenhos (gx_hr_pass_end) e o degrau volta ao que era quando o menu fecha. */
     g_menuForced = 0;
-    if (g_menuLast && gx_hr_max > FB_W && !gx_capturing && g_lv != HR_LV - 1) { /* (menu_320 / arquivos_320: em gx_hr_menu_mark) */
+    if (g_menuLast && gx_hr_max > FB_W && !gx_capturing && g_lv != HR_LV - 1 && !(gx_hr_pan560 && gx_retro)) { /* (menu_320 / arquivos_320: em gx_hr_menu_mark) */
         g_lvSaved = g_lv;
         g_lv = HR_LV - 1;
         g_menuForced = 1;
@@ -815,7 +857,7 @@ void gx_hr_pass_begin(void) {
     }
     w = k_lvW[g_lv];
     g_passW = w;
-    g_passH = w * 3 / 4;
+    g_passH = pass_h(w);
     g_passS = (float)w / (float)FB_W;
     g_lvHist[g_lv]++;
     g_passNo++;
@@ -874,8 +916,8 @@ void gx_hr_pass_end(double ms) {
             return;
         }
     }
-    if (gx_hr_max <= FB_W) {
-        return;
+    if (gx_hr_max <= FB_W || (gx_hr_pan560 && gx_retro)) {
+        return; /* (sem resolucao dinamica) */
     }
     {
         extern int port_res_hold __attribute__((weak)); /* input_miyoo.c: print de tela do OnionOS em andamento */
@@ -1086,8 +1128,15 @@ static void pbg_blit(HrSlot *s) {
  * sem o serrilhado do vizinho mais proximo: e dela que o jogo tira o fundo do menu de pausa (em 320x240) */
 static void reduce_box(const uint8_t *src, int w, int h, uint8_t *dst, int le) {
     int x, y;
+    const int hc = w * 3 / 4; /* (altura da imagem inteira; a de 752x560 perde as ultimas linhas) */
     for (y = 0; y < FB_H; y++) {
-        const int y0 = y * h / FB_H, y1 = (y + 1) * h / FB_H > y0 ? (y + 1) * h / FB_H : y0 + 1;
+        int y0 = y * hc / FB_H, y1 = (y + 1) * hc / FB_H > y0 ? (y + 1) * hc / FB_H : y0 + 1;
+        if (y1 > h) {
+            y1 = h;
+        }
+        if (y0 >= y1) {
+            y0 = y1 - 1;
+        }
         uint16_t *d = (uint16_t *)(dst + (size_t)y * FB_W * 2u);
         for (x = 0; x < FB_W; x++) {
             const int x0 = x * w / FB_W, x1 = (x + 1) * w / FB_W > x0 ? (x + 1) * w / FB_W : x0 + 1;

@@ -47,10 +47,20 @@
 #include "os_hw.h"
 #include "font8x16.h"
 
-#define PANEL_W 640
-#define PANEL_H 480
-#define SRC_MAX_W 640
-#define SRC_MAX_H 480
+/* Tamanho da tela: 640x480 no Mini Plus (e no Mini antigo); 752x560 no Mini v4 e no Mini Flip. Antes o jogo punha a
+ * tela destes em 640x480 e o aparelho ampliava a imagem para 752x560 (1,175 vez): as linhas do filtro retro e os
+ * pixels ficavam desiguais (relato de 11/2026). Agora a tela fica no tamanho dela e o jogo desenha para ele
+ * (gfx_hires.c, gx_hr_set_panel). Decidido em panel_detect, antes de mexer no modo da tela. */
+#define PANEL_MAX_W 752
+#define PANEL_MAX_H 560
+int miyoo_panel_w = 640, miyoo_panel_h = 480;
+#define PANEL_W miyoo_panel_w
+#define PANEL_H miyoo_panel_h
+#define SRC_MAX_W PANEL_W
+#define SRC_MAX_H PANEL_H
+/* o menu de opcoes e montado sempre em 640x480 (menu_miyoo.c); na tela de 752x560 ele e ampliado */
+#define MENU_W 640
+#define MENU_H 480
 
 int miyoo_opt_perf;
 int miyoo_opt_nogfx;
@@ -113,14 +123,45 @@ static int fb_set_mode(const char *why) {
         }
     }
     r = ioctl(fb_fd, FBIOPUT_VSCREENINFO, &n);
-    fprintf(stderr, "video: %s: tela estava %ux%u %ubpp (virtual %ux%u, pagina em y=%u); posta em 640x480 32bpp 2 paginas: %s\n",
-            why, v.xres, v.yres, v.bits_per_pixel, v.xres_virtual, v.yres_virtual, v.yoffset, r == 0 ? "ok" : "falhou");
+    fprintf(stderr, "video: %s: tela estava %ux%u %ubpp (virtual %ux%u, pagina em y=%u); posta em %dx%d 32bpp 2 paginas: %s\n",
+            why, v.xres, v.yres, v.bits_per_pixel, v.xres_virtual, v.yres_virtual, v.yoffset, PANEL_W, PANEL_H,
+            r == 0 ? "ok" : "falhou");
     if (r == 0) {
         if (system("killall -SIGUSR1 batmon >/dev/null 2>&1; killall -SIGUSR1 keymon >/dev/null 2>&1") != 0) {
             /* (sem eles rodando: nada a avisar) */
         }
     }
     return r;
+}
+
+/* tela de 560 linhas (Mini v4, Mini Flip)? O menu do Onion/RedOnion deixa a tela no tamanho dela quando abre o jogo;
+ * numa reabertura pelo proprio jogo (reiniciar, Game Switcher) ela ja esta como o jogo deixou (o tamanho dela tambem).
+ * O OnionOS grava o tamanho em /tmp/screen_resolution em algumas versoes. OOT_TELA=640 ou 752 (launch.sh) manda. */
+static void panel_detect(void) {
+    const char* e = getenv("OOT_TELA");
+    struct fb_var_screeninfo v;
+    int big = 0;
+    const char* why = "tela em 640x480";
+    if (e != NULL && (atoi(e) == 640 || atoi(e) == 752)) {
+        big = atoi(e) == 752;
+        why = "OOT_TELA";
+    } else if (ioctl(fb_fd, FBIOGET_VSCREENINFO, &v) == 0 && v.yres == 560 && (v.xres == 752 || v.xres == 750)) {
+        big = 1;
+        why = "modo em que a tela chegou";
+    } else {
+        FILE* f = fopen("/tmp/screen_resolution", "r");
+        if (f != NULL) {
+            int w = 0, h = 0;
+            if (fscanf(f, "%dx%d", &w, &h) == 2 && h == 560) {
+                big = 1;
+                why = "/tmp/screen_resolution";
+            }
+            fclose(f);
+        }
+    }
+    miyoo_panel_w = big ? 752 : 640;
+    miyoo_panel_h = big ? 560 : 480;
+    fprintf(stderr, "video: tela %dx%d (%s)\n", PANEL_W, PANEL_H, why);
 }
 
 static void fb_init(void) {
@@ -130,10 +171,21 @@ static void fb_init(void) {
         fprintf(stderr, "video: sem /dev/fb0 (nada sera mostrado)\n");
         return;
     }
+    panel_detect();
     fb_set_mode("abertura");
+    if (PANEL_W != 640 && (ioctl(fb_fd, FBIOGET_VSCREENINFO, &fb_var) || ioctl(fb_fd, FBIOGET_FSCREENINFO, &fix) ||
+                           fb_var.xres != (unsigned)PANEL_W || fb_var.yres != (unsigned)PANEL_H ||
+                           fb_var.bits_per_pixel != 32 || fix.line_length != (unsigned)PANEL_W * 4)) {
+        /* a tela nao aceitou o tamanho dela: volta para 640x480 (o aparelho amplia, como antes) */
+        fprintf(stderr, "video: a tela nao ficou em %dx%d (%ux%u, linha de %u bytes); voltando para 640x480\n", PANEL_W,
+                PANEL_H, fb_var.xres, fb_var.yres, fix.line_length);
+        miyoo_panel_w = 640;
+        miyoo_panel_h = 480;
+        fb_set_mode("tamanho da tela recusado");
+    }
     if (ioctl(fb_fd, FBIOGET_VSCREENINFO, &fb_var) || ioctl(fb_fd, FBIOGET_FSCREENINFO, &fix) ||
-        fb_var.xres != PANEL_W || fb_var.yres != PANEL_H || fb_var.bits_per_pixel != 32 ||
-        fix.line_length != PANEL_W * 4) {
+        fb_var.xres != (unsigned)PANEL_W || fb_var.yres != (unsigned)PANEL_H || fb_var.bits_per_pixel != 32 ||
+        fix.line_length != (unsigned)PANEL_W * 4) {
         fprintf(stderr, "video: framebuffer inesperado %ux%u %ubpp (nada sera mostrado)\n", fb_var.xres, fb_var.yres,
                 fb_var.bits_per_pixel);
         close(fb_fd);
@@ -153,11 +205,11 @@ static void fb_init(void) {
     if (fb_var.yres_virtual >= PANEL_H * 2 && fb_len >= (size_t)PANEL_W * PANEL_H * 4 * 2) {
         fb_pages = 2;
         fb_page = fb_var.yoffset >= (unsigned)PANEL_H ? 1 : 0;
-        fprintf(stderr, "video: tela 640x480, 2 paginas (vsync)\n");
+        fprintf(stderr, "video: tela %dx%d, 2 paginas (vsync)\n", PANEL_W, PANEL_H);
     } else {
         fb_pages = 1;
         fb_page = 0;
-        fprintf(stderr, "video: tela 640x480, 1 pagina (sem vsync)\n");
+        fprintf(stderr, "video: tela %dx%d, 1 pagina (sem vsync)\n", PANEL_W, PANEL_H);
     }
 }
 
@@ -229,9 +281,10 @@ static int hw_blit_ex(MI_PHY src, int sfmt, int sw, int sh, MI_PHY dst, int dw, 
 
 static int hw_blit_fmt(MI_PHY src, int sfmt, int sw, int sh, MI_PHY dst, int dw, int dh, int rotate, int mirror) {
     extern int gx_retro; /* gfx_hires.c: filtro retro */
-    if (gx_retro && sw == 320 && sh == 240 && dw == PANEL_W && dh == PANEL_H) {
+    if (gx_retro && sw * 2 == dw && sh * 2 == dh && dw == PANEL_W && dh == PANEL_H) {
         /* filtro retro: cada linha do jogo vai inteira para 2 linhas da tela (sem a suavizacao de cima para baixo, que
-         * misturaria as linhas vizinhas): 2 copias de 640x240, uma nas linhas pares e outra nas impares */
+         * misturaria as linhas vizinhas): 2 copias de 640x240, uma nas linhas pares e outra nas impares (752x280 com o
+         * jogo em 376x280 na tela de 752x560) */
         if (hw_blit_ex(src, sfmt, sw, sh, dst, dw, dh / 2, dw * 8, rotate, mirror) != 0) {
             return -1;
         }
@@ -242,6 +295,31 @@ static int hw_blit_fmt(MI_PHY src, int sfmt, int sw, int sh, MI_PHY dst, int dw,
 
 static int hw_blit(MI_PHY src, int sw, int sh, MI_PHY dst, int dw, int dh, int rotate, int mirror) {
     return hw_blit_fmt(src, E_MI_GFX_FMT_RGB565, sw, sh, dst, dw, dh, rotate, mirror);
+}
+
+/* imagem XRGB8888 ja na orientacao do painel (o menu de opcoes) ampliada para a pagina, sem giro */
+static int hw_blit32(MI_PHY src, int sw, int sh, MI_PHY dst, int dw, int dh) {
+    MI_GFX_Surface_t s = { src, E_MI_GFX_FMT_ARGB8888, (MI_U32)sw, (MI_U32)sh, (MI_U32)sw * 4 };
+    MI_GFX_Surface_t d = { dst, E_MI_GFX_FMT_ARGB8888, (MI_U32)dw, (MI_U32)dh, (MI_U32)dw * 4 };
+    MI_GFX_Rect_t sr = { 0, 0, (MI_U32)sw, (MI_U32)sh }, dr = { 0, 0, (MI_U32)dw, (MI_U32)dh };
+    MI_GFX_Opt_t opt;
+    MI_U16 fence = 0;
+    int r;
+    memset(&opt, 0, sizeof opt);
+    opt.stClipRect = dr;
+    opt.eSrcDfbBldOp = E_MI_GFX_DFB_BLD_ONE;
+    opt.eDstDfbBldOp = E_MI_GFX_DFB_BLD_ZERO;
+    opt.eMirror = E_MI_GFX_MIRROR_NONE;
+    opt.eRotate = E_MI_GFX_ROTATE_0;
+    opt.eDFBBlendFlag = E_MI_GFX_DFB_BLEND_NOFX;
+    pthread_mutex_lock(&g_blitMx);
+    r = mi.Blit(&s, &sr, &d, &dr, &opt, &fence);
+    pthread_mutex_unlock(&g_blitMx);
+    if (r != 0) {
+        return -1;
+    }
+    mi.Wait(TRUE, fence);
+    return 0;
 }
 
 /* imagens da fila (gfx_hook.c) na memoria MMA: o chip 2D le direto (opcao cor_direta, cor RGBA5551 na ordem do
@@ -733,7 +811,7 @@ static void ge_init(void) {
 }
 
 /* tela: as pecas da imagem 'key' por cima da pagina 'back' (depois da imagem); espera o MI_GFX acabar */
-static void ge_draw(const void* key, int back) {
+static void ge_draw(const void* key, int back, int imgW, int imgH) {
     const GxGeItem* it;
     int n, part, i, done = 0;
     uint32_t lo, hi;
@@ -751,12 +829,28 @@ static void ge_draw(const void* key, int back) {
     if (hi > lo && mem != NULL) {
         mi.Flush((void*)(mem + lo), hi - lo); /* (os texels novos estao no cache do processador) */
     }
+    /* as pecas vem em 640x480 (2x a tela do N64). Na tela de 752x560: a imagem cobre os 320 pixels de largura do N64
+     * (x * 752/640) e as linhas que couberem na mesma escala (y: largura da imagem / altura dela) */
+    const int scaled = PANEL_W != 640 || PANEL_H != 480;
+    const float kx = (float)PANEL_W / 640.0f;
+    const float ky = imgW > 0 && imgH > 0 ? (float)imgW * (float)PANEL_H / (640.0f * (float)imgH) : kx;
     for (i = 0; i < n; i++) {
         MI_GFX_Rect_t sr = { 1, 1, it[i].sw, it[i].sh };
         MI_GFX_Rect_t dr = { it[i].dx, it[i].dy, (MI_U32)it[i].dw, (MI_U32)it[i].dh };
+        if (scaled) {
+            const int x0 = (int)((float)it[i].dx * kx + 0.5f), x1 = (int)((float)(it[i].dx + it[i].dw) * kx + 0.5f);
+            const int y0 = (int)((float)it[i].dy * ky + 0.5f), y1 = (int)((float)(it[i].dy + it[i].dh) * ky + 0.5f);
+            if (x1 <= x0 || y1 <= y0) {
+                continue;
+            }
+            dr.s32Xpos = x0;
+            dr.s32Ypos = y0;
+            dr.u32Width = (MI_U32)(x1 - x0);
+            dr.u32Height = (MI_U32)(y1 - y0);
+        }
         if (!ge_place) { /* (a tela e de cabeca para baixo: o lugar girado aqui) */
-            dr.s32Xpos = PANEL_W - it[i].dx - it[i].dw;
-            dr.s32Ypos = PANEL_H - it[i].dy - it[i].dh;
+            dr.s32Xpos = PANEL_W - dr.s32Xpos - (int)dr.u32Width;
+            dr.s32Ypos = PANEL_H - dr.s32Ypos - (int)dr.u32Height;
         }
         if (ge_blit(ge_phys[part] + it[i].off, it[i].pw, it[i].ph, &sr, page, PANEL_W, PANEL_H, &dr, hw_rotate, &fence) == 0) {
             done++;
@@ -1053,7 +1147,7 @@ static void convert_n64(const uint16_t* src, uint16_t* dst, int npix) {
 /* sem MI_GFX: RGB565 (w x h) -> pagina XRGB8888 640x480, escalado e girado 180.
  * 320x240 (o normal): cada linha e montada espelhada e dobrada num buffer (NEON) e escrita
  * em duas linhas da tela; a memoria da tela e rapida para escrever e muito lenta para ler. */
-static uint32_t line_buf[PANEL_W] __attribute__((aligned(16)));
+static uint32_t line_buf[PANEL_MAX_W] __attribute__((aligned(16)));
 
 static inline uint32_t x8888(uint32_t c) {
     return ((c & 0xF800u) << 8) | ((c & 0xE000u) << 3) | ((c & 0x07E0u) << 5) | ((c & 0x0600u) >> 1) |
@@ -1215,7 +1309,7 @@ static int g_menuSrcLv, g_menuBgLv; /* brilho (gamma) com que a imagem foi desen
  * gfx_rdp.c: c^(1/(1+0,08*nivel))), com 1/4 da luz */
 static void menu_bg_build(void) {
     extern int gx_brilho;
-    const size_t n = (size_t)PANEL_W * PANEL_H;
+    const size_t n = (size_t)MENU_W * MENU_H;
     const int lv = gx_brilho < 0 ? 0 : gx_brilho > 10 ? 10 : gx_brilho;
     uint32_t lut[256];
     size_t i;
@@ -1277,12 +1371,71 @@ static void battery_draw(uint32_t* page) {
 }
 
 /* a pagina na tela agora (imagem do Game Switcher, port/savestate.c): 640x480, girada 180 graus */
+/* a tela de 752x560 vai reduzida para 640x480 (o tamanho que o Game Switcher sempre recebeu do jogo) */
+static void page_to_menu(const uint32_t* src, uint32_t* dst);
+
 int miyoo_video_front(const uint32_t** page) {
+    static uint32_t* small;
     if (fb_mem == NULL) {
         return 0;
     }
-    *page = fb_page_ptr(fb_page);
+    if (PANEL_W == MENU_W && PANEL_H == MENU_H) {
+        *page = fb_page_ptr(fb_page);
+        return 1;
+    }
+    if (small == NULL && (small = (uint32_t*)malloc((size_t)MENU_W * MENU_H * 4)) == NULL) {
+        return 0;
+    }
+    page_to_menu(fb_page_ptr(fb_page), small);
+    *page = small;
     return 1;
+}
+
+/* pagina da tela (girada) -> imagem de 640x480 (girada), vizinho mais proximo */
+static void page_to_menu(const uint32_t* src, uint32_t* dst) {
+    static uint16_t xs[MENU_W];
+    int x, y;
+    for (x = 0; x < MENU_W; x++) {
+        xs[x] = (uint16_t)(((2 * x + 1) * PANEL_W) / (2 * MENU_W));
+    }
+    for (y = 0; y < MENU_H; y++) {
+        const uint32_t* s = src + (size_t)(((2 * y + 1) * PANEL_H) / (2 * MENU_H)) * PANEL_W;
+        uint32_t* d = dst + (size_t)y * MENU_W;
+        for (x = 0; x < MENU_W; x++) {
+            d[x] = s[xs[x]];
+        }
+    }
+}
+
+#ifdef HAVE_MI_GFX
+static MI_PHY g_mwPhys; /* o menu montado na memoria que o chip 2D le (tela de 752x560: ele amplia) */
+static uint32_t* g_mwVirt;
+#endif
+
+/* menu de 640x480 (girado) -> pagina da tela: o chip 2D amplia (com suavizacao); sem ele, vizinho mais proximo */
+static void menu_to_page(const uint32_t* src, uint32_t* dst, int back) {
+    static uint16_t xs[PANEL_MAX_W];
+    int x, y;
+#ifdef HAVE_MI_GFX
+    if (hw_ok && src == g_mwVirt && g_mwVirt != NULL) {
+        mi.Flush(g_mwVirt, (MI_U32)(MENU_W * MENU_H * 4));
+        if (hw_blit32(g_mwPhys, MENU_W, MENU_H, (MI_PHY)fb_phys + (MI_PHY)back * PANEL_W * PANEL_H * 4, PANEL_W, PANEL_H) == 0) {
+            return;
+        }
+    }
+#else
+    (void)back;
+#endif
+    for (x = 0; x < PANEL_W; x++) {
+        xs[x] = (uint16_t)(((2 * x + 1) * MENU_W) / (2 * PANEL_W));
+    }
+    for (y = 0; y < PANEL_H; y++) {
+        const uint32_t* s = src + (size_t)(((2 * y + 1) * MENU_H) / (2 * PANEL_H)) * MENU_W;
+        uint32_t* d = dst + (size_t)y * PANEL_W;
+        for (x = 0; x < PANEL_W; x++) {
+            d[x] = s[xs[x]];
+        }
+    }
 }
 
 static void toast_draw(uint32_t* page) {
@@ -1548,7 +1701,7 @@ static void* flip_proc(void* arg) {
                 {
                     /* a ultima coluna: o jogo escurece/pinta a tela com retangulos que param 1 pixel antes da
                      * borda direita (no N64 essa coluna nao aparece direito); repete a vizinha (2 em 640) */
-                    const int k = w >= 640 ? 2 : 1;
+                    const int k = PANEL_W == 640 ? (w >= 640 ? 2 : 1) : (w + 319) / 320; /* (a ultima coluna do N64) */
                     int y, j;
                     for (y = 0; y < h; y++) {
                         uint16_t* row = cb + (size_t)y * w;
@@ -1574,7 +1727,7 @@ static void* flip_proc(void* arg) {
                         done = 1;
                         if (!blank) {
                             pt_ev(PT_FLIP_GE, 0);
-                            ge_draw(gekey, back); /* o HUD / logo pelo acelerador, por cima */
+                            ge_draw(gekey, back, w, h); /* o HUD / logo pelo acelerador, por cima */
                             pt_ev(PT_FLIP_GE + 1, 0);
                             rt_draw(back); /* filtro retro (opcao retro_filter), por cima de tudo do jogo */
                         }
@@ -1588,7 +1741,7 @@ static void* flip_proc(void* arg) {
                 if (!done) {
                     cpu_present(cb, w, h, fb_page_ptr(back));
                 }
-                if (tb != NULL && !blank) {
+                if (tb != NULL && !blank && PANEL_W == 640) {
                     text_present(tb, tr, fb_page_ptr(back)); /* a caixa de texto em 640 por cima */
                     g_txShown++;
                 } else if (w >= 640) {
@@ -1628,7 +1781,8 @@ static void* flip_proc(void* arg) {
         } else if (fb_pages == 2 && clock_on && fb_mem != NULL && miyoo_menu_active() && (!g_menuShown || miyoo_menu_dirty())) {
             /* menu de opcoes (menu_miyoo.c): o fundo e a ultima imagem do jogo, escurecida, guardada ao abrir */
             const int back = fb_page ^ 1;
-            const size_t n = (size_t)PANEL_W * PANEL_H;
+            const size_t n = (size_t)MENU_W * MENU_H; /* (o menu e o fundo dele: 640x480) */
+            const int same = PANEL_W == MENU_W && PANEL_H == MENU_H;
             if (!g_menuShown) {
                 const uint32_t* front = fb_page_ptr(fb_page);
                 size_t i;
@@ -1673,10 +1827,14 @@ static void* flip_proc(void* arg) {
                 }
                 if (g_menuBg != NULL) {
                     extern int gx_brilho;
-                    memcpy(g_menuSrc, front, n * 4);
+                    if (same) {
+                        memcpy(g_menuSrc, front, n * 4);
+                    } else {
+                        page_to_menu(front, g_menuSrc);
+                    }
                     g_menuSrcLv = gx_brilho < 0 ? 0 : gx_brilho > 10 ? 10 : gx_brilho;
                     for (i = 0; i < n; i++) {
-                        g_menuBg[i] = (front[i] >> 2) & 0x3F3F3Fu; /* 1/4 do brilho */
+                        g_menuBg[i] = (g_menuSrc[i] >> 2) & 0x3F3F3Fu; /* 1/4 do brilho */
                     }
                     g_menuBgLv = g_menuSrcLv;
                 }
@@ -1688,7 +1846,26 @@ static void* flip_proc(void* arg) {
                 static uint32_t* s_work;
                 uint32_t* dst = fb_page_ptr(back);
                 if (s_work == NULL) {
-                    s_work = (uint32_t*)malloc(n * 4);
+#ifdef HAVE_MI_GFX
+                    if (!same && hw_ok && g_mwVirt == NULL) {
+                        void* v = NULL;
+                        if (mi.MmaAlloc(NULL, (MI_U32)(n * 4), &g_mwPhys) == 0) {
+                            if (mi.Mmap(g_mwPhys, (MI_U32)(n * 4), &v, TRUE) == 0) {
+                                g_mwVirt = (uint32_t*)v;
+                            } else {
+                                mi.MmaFree(g_mwPhys);
+                                g_mwPhys = 0;
+                            }
+                        }
+                    }
+                    s_work = g_mwVirt;
+#endif
+                    if (s_work == NULL) {
+                        s_work = (uint32_t*)malloc(n * 4);
+                    }
+                }
+                if (s_work == NULL && !same) {
+                    goto menu_skip; /* (sem memoria: a tela fica como esta) */
                 }
                 if (s_work != NULL) {
                     dst = s_work;
@@ -1703,14 +1880,20 @@ static void* flip_proc(void* arg) {
                     memset(dst, 0, n * 4);
                 }
                 miyoo_menu_render(dst);
-                battery_draw(dst);
-                if (dst != fb_page_ptr(back)) {
-                    memcpy(fb_page_ptr(back), dst, n * 4);
+                if (same) {
+                    battery_draw(dst);
+                    if (dst != fb_page_ptr(back)) {
+                        memcpy(fb_page_ptr(back), dst, n * 4);
+                    }
+                } else {
+                    menu_to_page(dst, fb_page_ptr(back), back);
+                    battery_draw(fb_page_ptr(back));
                 }
             }
             fb_var.yoffset = (unsigned)(back * PANEL_H);
             ioctl(fb_fd, FBIOPAN_DISPLAY, &fb_var); /* espera o vsync */
             fb_page = back;
+        menu_skip:;
         } else if (fb_pages == 2 && clock_on) {
             fb_var.yoffset = (unsigned)(fb_page * PANEL_H); /* mesma pagina: so espera o vsync */
             pt_ev(PT_FLIP_VSYNC, 0);
@@ -1821,6 +2004,10 @@ void miyoo_video_init(void) {
     }
     video_inited = 1;
     fb_init();
+    {
+        extern void gx_hr_set_panel(int w, int h); /* gfx_hires.c: desenho no tamanho da tela */
+        gx_hr_set_panel(PANEL_W, PANEL_H);
+    }
     hw_ok = hw_init();
     if (!hw_ok) {
         int i;
@@ -1886,6 +2073,15 @@ static void release_mma(void) {
         rt_phys = 0;
         rt_mode = -1;
         kb += (PANEL_W * PANEL_H * 4) >> 10;
+        n++;
+    }
+    if (g_mwVirt != NULL) {
+        /* (so no fim do programa: o menu nao abre mais depois disto) */
+        mi.Munmap(g_mwVirt, (MI_U32)(MENU_W * MENU_H * 4));
+        mi.MmaFree(g_mwPhys);
+        g_mwVirt = NULL;
+        g_mwPhys = 0;
+        kb += (MENU_W * MENU_H * 4) >> 10;
         n++;
     }
     if (g_bgVirt != NULL) {

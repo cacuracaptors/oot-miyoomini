@@ -632,7 +632,9 @@ static int interp_render(OSTask *t, volatile int *yield) {
             {
                 /* memoria que o chip 2D da tela le direto (video_miyoo.c), se houver; senao a comum */
                 extern void *(*gx_img_alloc)(size_t bytes);
-                const size_t nb = ({ extern int gx_hr_max_opt; gx_hr_max_opt; }) > 320 ? 640 * 480 * 2 + 64 : 320 * 240 * 2 + 64;
+                extern size_t gx_hr_img_bytes(void); /* gfx_hires.c: 640x480, ou 752x560 na tela do Mini v4 / Flip */
+                extern int gx_hr_max_opt, gx_hr_pan560, gx_retro;
+                const size_t nb = gx_hr_max_opt > 320 || (gx_hr_pan560 && gx_retro) ? gx_hr_img_bytes() : 320 * 240 * 2 + 64;
                 g_ibuf[i] = gx_img_alloc != NULL ? (uint16_t *)gx_img_alloc(nb) : NULL;
                 if (g_ibuf[i] == NULL) {
                     g_ibuf[i] = (uint16_t *)malloc(nb); /* (+64: como buf_alloc) */
