@@ -3726,7 +3726,7 @@ int gx_helper_spin_us = 0;
 /* 1 = a thread auxiliar desenha a fila enquanto ela ainda e montada; 0 = so no fim (como antes) */
 int gx_stream = 1;
 
-enum { JOB_TRI, JOB_RECT, JOB_FILL, JOB_BGEND, JOB_BGPART };
+enum { JOB_TRI, JOB_RECT, JOB_FILL, JOB_BGEND };
 #define JOBF_DEFER 1 /* fundo adiado: so desenhado no JOB_BGEND */
 #define JOBF_COVW 2  /* marca na mascara os pixels que escreve */
 #define JOBF_HDF 4   /* textura nova ampliada (perto da camera): filtro leve (ver hd_close) */
@@ -3908,15 +3908,8 @@ static GxJob *batch_push(int kind) {
  * Estados: 0 sem fundo; 1 juntando trabalhos do fundo; 2 janela aberta (fundo guardado). */
 int gx_bgdefer = 1;
 int gx_bgmix = 1; /* 1 = camadas misturadas do fundo tambem adiadas */
-/* Lote 192: um transparente (que le a tela) no meio da janela fechava a janela e o ceu inteiro era desenhado ali,
- * mesmo o que o chao e as casas cobririam depois (no lago e em Kakariko um objeto transparente logo depois do ceu
- * fechava a janela no comeco). Agora o fundo e desenhado so no retangulo que o transparente cobre (JOB_BGPART, onde
- * nada escreveu ainda), esse retangulo fica marcado, e a janela continua aberta. Mesma imagem. */
-int gx_bgpart = 0; /* (desligado ate a imagem ficar certa no aparelho: so o reprodutor liga, --fundo-parcial) */
 static int g_bgState, g_bgFirst, g_bgLast, g_bgY0, g_bgY1;
 static const uint8_t *g_bgCimg;
-#define BGP_MEMO 4
-static int g_bgpR[BGP_MEMO][4], g_bgpN; /* retangulos ja preenchidos nesta janela (os ultimos) */
 
 static void bg_end(void) {
     GxJob *j;
@@ -3926,8 +3919,8 @@ static void bg_end(void) {
     }
 #ifdef GX_REPLAY_DIAG
     if (getenv("BGDBG")) {
-        fprintf(stderr, "[fundo] fecha: estado %d, trabalhos adiados %d..%d, linhas %d..%d, retangulos parciais %d | quem fechou: tex %08x omL %08x comb %08x %08x\n",
-                g_bgState, g_bgFirst, g_bgLast, g_bgY0, g_bgY1, g_bgpN, gx.timgRaw, gx.omL, gx.combW0, gx.combW1);
+        fprintf(stderr, "[fundo] fecha: estado %d, trabalhos adiados %d..%d, linhas %d..%d | quem fechou: tex %08x omL %08x comb %08x %08x\n",
+                g_bgState, g_bgFirst, g_bgLast, g_bgY0, g_bgY1, gx.timgRaw, gx.omL, gx.combW0, gx.combW1);
     }
 #endif
     g_bgState = 0;
@@ -3944,70 +3937,8 @@ static void bg_end(void) {
 }
 
 /* decide, antes de enfileirar um trabalho de desenho, como ele entra no fundo adiado (devolve JOBF_*) */
-/* fundo so no retangulo (xs..xe, ys..ye) antes de um transparente; a janela continua (lote 192) */
-static void bg_part(int xs, int xe, int ys, int ye) {
-    GxJob *j;
-    int k;
-    if (ys < 0) ys = 0;
-    if (xs < 0) xs = 0;
-    if (xe > COV_W - 17) xe = COV_W - 17;
-    if (ye > COV_H - 1) ye = COV_H - 1;
-    if (xs > xe || ys > ye) {
-        return;
-    }
-    for (k = 0; k < g_bgpN && k < BGP_MEMO; k++) {
-        const int *r = g_bgpR[k];
-        if (xs >= r[0] && xe <= r[1] && ys >= r[2] && ye <= r[3]) {
-            return; /* (ja preenchido: o fundo ali ja esta desenhado e marcado) */
-        }
-    }
-#ifdef GX_REPLAY_DIAG
-    {
-        static int lim = -2;
-        if (lim == -2) {
-            lim = getenv("BGPMAX") ? atoi(getenv("BGPMAX")) : -1;
-        }
-        if (lim >= 0 && g_bgpN >= lim) {
-            bg_end(); /* (diagnostico: so as primeiras BGPMAX) */
-            return;
-        }
-        if (getenv("BGDBG")) {
-            fprintf(stderr, "[fundo] parcial %d: trabalho %d tex %08x omL %08x comb %08x %08x | x %d..%d y %d..%d | estado %d\n",
-                    g_bgpN + 1, g_nJobs, gx.timgRaw, gx.omL, gx.combW0, gx.combW1, xs, xe, ys, ye, g_bgState);
-        }
-    }
-#endif
-    run_close();
-    g_ord[g_nJobs] = (uint16_t)g_nJobs;
-    j = &g_jobs[g_nJobs++]; /* batch_reserve deixou lugar (o mesmo do JOB_BGEND: a janela continua aberta) */
-    j->kind = JOB_BGPART;
-    j->flags = 0;
-    j->prog = -1;
-    j->x0 = g_bgFirst;
-    j->x1 = g_bgLast;
-    j->y0 = ys;
-    j->y1 = ye;
-    j->lys = xs; /* (colunas: lys/lye nao sao usados fora do JOBF_LAZY) */
-    j->lye = xe;
-    j->fill = (uint32_t)(g_bgpN + 1); /* (numero do retangulo nesta janela: diagnostico) */
-    k = g_bgpN++ % BGP_MEMO;
-    g_bgpR[k][0] = xs;
-    g_bgpR[k][1] = xe;
-    g_bgpR[k][2] = ys;
-    g_bgpR[k][3] = ye;
-    if (g_bgState == 1) {
-        g_bgState = 2;
-        g_bgY0 = ys;
-        g_bgY1 = ye;
-    } else {
-        if (ys < g_bgY0) g_bgY0 = ys;
-        if (ye > g_bgY1) g_bgY1 = ye;
-    }
-    batch_publish();
-}
-
-static int bg_pre(const FastProg *f, int useZ, int ys, int ye, int xs, int xe) {
-    int cand, compat, xlu;
+static int bg_pre(const FastProg *f, int useZ, int ys, int ye) {
+    int cand, compat;
     if (f->dead) {
         return 0; /* nao escreve nada */
     }
@@ -4026,9 +3957,6 @@ static int bg_pre(const FastProg *f, int useZ, int ys, int ye, int xs, int xe) {
      * desenhadas na ordem, so onde nada cobriu, e leem so o fundo */
     cand = gx_bgdefer && f->fused && (!f->needMem || (gx_bgmix && g_bgState == 1 && f->cimg == g_bgCimg)) &&
            !(useZ && f->zimg != NULL) && f->cwidth <= COV_W - 16 && ye < COV_H && f->cimg != NULL;
-    /* transparente na mesma imagem: fundo so embaixo dele e a janela continua */
-    xlu = gx_bgpart && g_bgState != 0 && f->fused && f->needMem && f->cimg == g_bgCimg && f->cwidth <= COV_W - 16 &&
-          ye < COV_H && !(cand && g_bgState == 1);
     if (g_bgState == 1) {
         if (cand && f->cimg == g_bgCimg) {
             g_bgLast = g_nJobs;
@@ -4039,10 +3967,6 @@ static int bg_pre(const FastProg *f, int useZ, int ys, int ye, int xs, int xe) {
             g_bgY0 = ys < 0 ? 0 : ys;
             g_bgY1 = ye;
             return JOBF_COVW;
-        }
-        if (xlu) {
-            bg_part(xs, xe, ys, ye);
-            return 0;
         }
         bg_end();
     } else if (g_bgState == 2) {
@@ -4055,10 +3979,6 @@ static int bg_pre(const FastProg *f, int useZ, int ys, int ye, int xs, int xe) {
             }
             return JOBF_COVW;
         }
-        if (xlu) {
-            bg_part(xs, xe, ys, ye);
-            return 0;
-        }
         bg_end();
     }
     if (cand) {
@@ -4068,7 +3988,6 @@ static int bg_pre(const FastProg *f, int useZ, int ys, int ye, int xs, int xe) {
         }
 #endif
         g_bgState = 1;
-        g_bgpN = 0;
         g_bgFirst = g_bgLast = g_nJobs;
         g_bgCimg = f->cimg;
         g_bgY0 = 1;
@@ -4134,20 +4053,7 @@ static void batch_tri(const GxPrim *p, const TriEdges *g) {
     int fl;
     batch_reserve();
     prog = cur_prog();
-    {
-        float mn = g->px[0], mx = g->px[0];
-        int k3;
-        for (k3 = 1; k3 < 3; k3++) {
-            if (g->px[k3] < mn) mn = g->px[k3];
-            if (g->px[k3] > mx) mx = g->px[k3];
-        }
-        {
-            int xs = (int)floorf(mn) - 1, xe = (int)ceilf(mx) + 1;
-            if (xs < g->sx0) xs = g->sx0;
-            if (xe > g->sx1) xe = g->sx1;
-            fl = bg_pre(&g_progs[prog], p->useZ, g->ys, g->ye, xs, xe);
-        }
-    }
+    fl = bg_pre(&g_progs[prog], p->useZ, g->ys, g->ye);
     {
         const FastProg *f = &g_progs[prog];
         const int sortable = gx_sort_opaque && !(fl & JOBF_DEFER) && p->useZ && f->zimg != NULL && f->zcmp &&
@@ -4187,7 +4093,7 @@ static void batch_rect(const GxPrim *p, int x0, int y0, int x1, int y1) {
     int fl;
     batch_reserve();
     prog = cur_prog();
-    fl = bg_pre(&g_progs[prog], p->useZ, y0, y1, x0, x1);
+    fl = bg_pre(&g_progs[prog], p->useZ, y0, y1);
     j = batch_push(JOB_RECT);
     j->flags = fl;
     j->prog = prog;
@@ -4343,20 +4249,7 @@ static int fast_tri_lazy(const TriRaw *R) {
     if (f->sampnF[0] != NULL || f->sampnF[1] != NULL) {
         return 0; /* (hd_close precisa do triangulo montado) */
     }
-    {
-        float mn = R->sx[0], mx = R->sx[0];
-        int k3;
-        for (k3 = 1; k3 < 3; k3++) {
-            if (R->sx[k3] < mn) mn = R->sx[k3];
-            if (R->sx[k3] > mx) mx = R->sx[k3];
-        }
-        {
-            int xs = (int)floorf(mn) - 1, xe = (int)ceilf(mx) + 1;
-            if (xs < R->scX0) xs = R->scX0;
-            if (xe > R->scX1) xe = R->scX1;
-            fl = bg_pre(&g_progs[prog], R->useZ, ys, ye, xs, xe);
-        }
-    }
+    fl = bg_pre(&g_progs[prog], R->useZ, ys, ye);
     {
         const int sortable = gx_sort_opaque && !(fl & JOBF_DEFER) && R->useZ && f->zimg != NULL && f->zcmp && f->zupd &&
                              !f->zdec && !f->needMem && !f->dead;
@@ -4398,10 +4291,87 @@ static int fast_tri_lazy(const TriRaw *R) {
 
 static void run_jobs(FastCtx *ctx, int band, int nb, int i0, int i1);
 /* desenha os trabalhos do fundo guardados so onde a mascara esta livre; depois limpa as linhas desta thread */
+/* Lote 195: o fundo adiado era desenhado em cada linha inteira dos triangulos do ceu, com a mascara descartando os
+ * pixels cobertos grupo a grupo - com o chao e as casas cobrindo quase tudo, quase todo o trabalho era descartado (o ceu
+ * custava ~2 ms em Kakariko com pouco ceu na tela). Agora cada linha da janela vira uma lista de trechos livres (feita
+ * uma vez, para todos os trabalhos do fundo): linhas cobertas inteiras sao puladas e cada trabalho so desenha os
+ * trechos livres. Mesma imagem (a mascara continua ligada). Opcao gx_bg_trechos (replay --sem-fundo-trechos). */
+int gx_bg_trechos = 1;
+#define BG_RUNS 24 /* trechos livres guardados por linha; mais que isso: a linha inteira com a mascara (como antes) */
+static int16_t g_bgRun[COV_H][BG_RUNS][2];
+static int8_t g_bgNRun[COV_H]; /* -1 = muitos trechos (linha inteira pela mascara) */
+
+static void bg_span(const GxPrim *P, const FastProg *f, FastCtx *ctx, int y, int xs, int xe, int useRuns) {
+    int r, n;
+    if (!useRuns) {
+        gx_span_fast(P, f, ctx, y, xs, xe);
+        return;
+    }
+    n = g_bgNRun[y];
+    if (n < 0) {
+        gx_span_fast(P, f, ctx, y, xs, xe);
+        return;
+    }
+    for (r = 0; r < n; r++) {
+        const int a = g_bgRun[y][r][0] > xs ? g_bgRun[y][r][0] : xs;
+        const int b = g_bgRun[y][r][1] < xe ? g_bgRun[y][r][1] : xe;
+        if (a <= b) {
+            gx_span_fast(P, f, ctx, y, a, b);
+        }
+    }
+}
+
 static void run_bg(FastCtx *ctx, int band, int nb, const GxJob *e) {
     int i, y;
     const uint8_t *own = ctx->own ? ctx->own : g_own;
+    const int useRuns = gx_bg_trechos && e->y0 <= e->y1;
     ctx->covR = e->y0 <= e->y1; /* janela sem nada marcado: desenha o fundo inteiro, sem a mascara */
+    if (useRuns) {
+        /* trechos livres das linhas desta thread (fora de y0..y1 nada foi marcado: a linha inteira) */
+        int w = COV_W - 16;
+        for (i = e->x0; i <= e->x1; i++) {
+            if (g_jobs[i].flags & JOBF_DEFER) {
+                w = g_progs[g_jobs[i].prog].cwidth;
+                break;
+            }
+        }
+        for (y = 0; y < COV_H; y++) {
+            if (!row_mine_t(own, y, band, nb)) {
+                continue;
+            }
+            if (y < e->y0 || y > e->y1) {
+                g_bgNRun[y] = 1;
+                g_bgRun[y][0][0] = 0;
+                g_bgRun[y][0][1] = (int16_t)(w - 1);
+                continue;
+            }
+            {
+                const uint8_t *c = g_cov[y];
+                int x = 0, n = 0;
+                while (x < w) {
+                    const uint8_t *z = (const uint8_t *)memchr(c + x, 0, (size_t)(w - x));
+                    int x1;
+                    if (z == NULL) {
+                        break;
+                    }
+                    x = (int)(z - c);
+                    x1 = x;
+                    while (x1 + 1 < w && c[x1 + 1] == 0) {
+                        x1++;
+                    }
+                    if (n == BG_RUNS) {
+                        n = -1;
+                        break;
+                    }
+                    g_bgRun[y][n][0] = (int16_t)x;
+                    g_bgRun[y][n][1] = (int16_t)x1;
+                    n++;
+                    x = x1 + 1;
+                }
+                g_bgNRun[y] = (int8_t)n;
+            }
+        }
+    }
     for (i = e->x0; i <= e->x1; i++) {
         const GxJob *t = &g_jobs[i];
         const FastProg *f;
@@ -4416,14 +4386,14 @@ static void run_bg(FastCtx *ctx, int band, int nb, const GxJob *e) {
             }
             for (y = t->g.ys; y <= t->g.ye; y++) {
                 int xs, xe;
-                if (row_mine_t(own, y, band, nb) && tri_span(&t->g, y, &xs, &xe)) {
-                    gx_span_fast(&t->P, f, ctx, y, xs, xe);
+                if (row_mine_t(own, y, band, nb) && (!useRuns || g_bgNRun[y] != 0) && tri_span(&t->g, y, &xs, &xe)) {
+                    bg_span(&t->P, f, ctx, y, xs, xe, useRuns);
                 }
             }
         } else {
             for (y = t->y0; y <= t->y1; y++) {
-                if (row_mine_t(own, y, band, nb)) {
-                    gx_span_fast(&t->P, f, ctx, y, t->x0, t->x1);
+                if (row_mine_t(own, y, band, nb) && (!useRuns || g_bgNRun[y] != 0)) {
+                    bg_span(&t->P, f, ctx, y, t->x0, t->x1, useRuns);
                 }
             }
         }
@@ -4434,81 +4404,6 @@ static void run_bg(FastCtx *ctx, int band, int nb, const GxJob *e) {
             memset(g_cov[y], 0, COV_W);
         }
     }
-}
-
-/* fundo so no retangulo do JOB_BGPART (lote 192): onde a mascara esta livre; depois marca o retangulo */
-static void run_bgpart(FastCtx *ctx, int band, int nb, const GxJob *e) {
-    int i, y;
-    const uint8_t *own = ctx->own ? ctx->own : g_own;
-    const int cx0 = e->lys, cx1 = e->lye;
-    uint8_t need[COV_H]; /* linhas do retangulo com algum pixel ainda livre (as cobertas inteiras ficam de fora) */
-    int any = 0;
-    for (y = e->y0; y <= e->y1; y++) {
-        need[y] = row_mine_t(own, y, band, nb) && memchr(g_cov[y] + cx0, 0, (size_t)(cx1 - cx0 + 1)) != NULL;
-        any |= need[y];
-    }
-    ctx->covR = 1;
-    ctx->covW = 0;
-    for (i = any ? e->x0 : e->x1 + 1; i <= e->x1; i++) {
-        const GxJob *t = &g_jobs[i];
-        const FastProg *f;
-        int ya, yb;
-        if (!(t->flags & JOBF_DEFER)) {
-            continue;
-        }
-        f = &g_progs[t->prog];
-        ctx->hdF = (t->flags & JOBF_HDF) != 0;
-        if (t->kind == JOB_TRI) {
-            if ((t->flags & JOBF_LAZY) && (!rows_any(own, t->lys, t->lye, band, nb) || !tri_ready(t))) {
-                continue;
-            }
-            ya = t->g.ys > e->y0 ? t->g.ys : e->y0;
-            yb = t->g.ye < e->y1 ? t->g.ye : e->y1;
-            for (y = ya; y <= yb; y++) {
-                int xs, xe;
-                if (need[y] && tri_span(&t->g, y, &xs, &xe)) {
-                    if (xs < cx0) xs = cx0;
-                    if (xe > cx1) xe = cx1;
-                    if (xs <= xe) {
-                        gx_span_fast(&t->P, f, ctx, y, xs, xe);
-                    }
-                }
-            }
-        } else {
-            const int xs = t->x0 > cx0 ? t->x0 : cx0, xe = t->x1 < cx1 ? t->x1 : cx1;
-            ya = t->y0 > e->y0 ? t->y0 : e->y0;
-            yb = t->y1 < e->y1 ? t->y1 : e->y1;
-            if (xs <= xe) {
-                for (y = ya; y <= yb; y++) {
-                    if (need[y]) {
-                        gx_span_fast(&t->P, f, ctx, y, xs, xe);
-                    }
-                }
-            }
-        }
-    }
-    ctx->covR = 0;
-    for (y = e->y0; y <= e->y1 && y < COV_H; y++) {
-        if (row_mine_t(own, y, band, nb)) {
-            memset(g_cov[y] + cx0, 1, (size_t)(cx1 - cx0 + 1));
-        }
-    }
-#ifdef GX_REPLAY_DIAG
-    if (getenv("BGCOVDUMP") && (uint32_t)atoi(getenv("BGCOVDUMP")) == e->fill) {
-        /* (diagnostico: a mascara logo depois deste retangulo; 255 = marcado) */
-        FILE *fp = fopen("cov.pgm", "wb");
-        if (fp != NULL) {
-            int x;
-            fprintf(fp, "P5 %d %d 255\n", 384, 288);
-            for (y = 0; y < 288; y++) {
-                for (x = 0; x < 384; x++) {
-                    fputc(g_cov[y][x] ? 255 : 0, fp);
-                }
-            }
-            fclose(fp);
-        }
-    }
-#endif
 }
 
 static void run_jobs(FastCtx *ctx, int band, int nb, int i0, int i1) {
@@ -4565,9 +4460,6 @@ static void run_jobs(FastCtx *ctx, int band, int nb, int i0, int i1) {
             }
             case JOB_BGEND:
                 run_bg(ctx, band, nb, j);
-                break;
-            case JOB_BGPART:
-                run_bgpart(ctx, band, nb, j);
                 break;
             default: {
                 /* preenchimento de 16 bits: pixel par = metade alta da cor, impar = baixa (como gx_fill_px) */
