@@ -77,7 +77,15 @@ static const Item k_items[] = {
     R(TAB_CONTROLS, "dpad_smooth_turn", "Smooth D-pad turn (ms)", "Direcional suave (ms)", 0, 200, 10),
     T(TAB_CONTROLS, "natural_aiming", "Natural aiming (up looks up)", "Mira natural (cima olha p/ cima)"),
     T(TAB_CONTROLS, "smooth_aiming", "Smooth aiming", "Mira suave"),
-    /* teclas personalizaveis (lote 197): toque e segurado de cada botao (input_miyoo.c); o nome vem de key_label */
+    T(TAB_CONTROLS, "auto_jump", "Automatic jump", "Pulo automático"),
+    R(TAB_CONTROLS, "jump_strength", "Jump strength (x10)", "Força do pulo (x10)", 40, 120, 2),
+    T(TAB_CONTROLS, "air_steering", "Mid-air steering", "Direção no ar"),
+    T(TAB_CONTROLS, "ledge_grab", "Grab ledges when walking off", "Agarrar a borda ao sair dela"),
+    R(TAB_CONTROLS, "sprint_speed", "Sprint speed (%)", "Corrida (% da velocidade)", 100, 250, 10),
+    T(TAB_CONTROLS, "quick_gear_swap", "SELECT+Left/Right: tunic/boots", "SELECT+esq./dir.: túnica/botas"),
+    /* teclas personalizaveis (lote 197): no fim da aba, debaixo de um titulo (linha "#": so o titulo, nao se escolhe);
+     * toque e segurado de cada botao (input_miyoo.c); o nome vem de key_label */
+    { TAB_CONTROLS, "#keys", "Buttons: tap and hold", "Teclas: toque e segurar", -1, -1, 0, 0 },
     R(TAB_CONTROLS, "button_a_tap", "", "", 0, 12, 1),
     R(TAB_CONTROLS, "button_a_hold", "", "", 0, 12, 1),
     R(TAB_CONTROLS, "button_b_tap", "", "", 0, 12, 1),
@@ -99,12 +107,6 @@ static const Item k_items[] = {
     R(TAB_CONTROLS, "button_select_tap", "", "", 0, 12, 1),
     R(TAB_CONTROLS, "button_select_hold", "", "", 0, 12, 1),
     { TAB_CONTROLS, "@keys", "Default buttons", "Teclas padrão", -1, -1, 0, 0 },
-    T(TAB_CONTROLS, "auto_jump", "Automatic jump", "Pulo automático"),
-    R(TAB_CONTROLS, "jump_strength", "Jump strength (x10)", "Força do pulo (x10)", 40, 120, 2),
-    T(TAB_CONTROLS, "air_steering", "Mid-air steering", "Direção no ar"),
-    T(TAB_CONTROLS, "ledge_grab", "Grab ledges when walking off", "Agarrar a borda ao sair dela"),
-    R(TAB_CONTROLS, "sprint_speed", "Sprint speed (%)", "Corrida (% da velocidade)", 100, 250, 10),
-    T(TAB_CONTROLS, "quick_gear_swap", "SELECT+Left/Right: tunic/boots", "SELECT+esq./dir.: túnica/botas"),
 
     T(TAB_ENH, "fast_chests", "Fast chests", "Baús rápidos"),
     T(TAB_ENH, "tot_medallion_colors", "Colored ToT medallions", "Medalhões coloridos (Templo)"),
@@ -334,6 +336,9 @@ static const char* item_label(const Item* it) {
     if (!strncmp(it->name, "button_", 7)) {
         return key_label(it);
     }
+    if (it->name[0] == '#') {
+        return tr(it->en, it->pt); /* (titulo de uma parte da aba) */
+    }
     if (lang() == 2) {
         if (it->name[0] == '@') {
             return tr(it->en, it->pt);
@@ -488,8 +493,13 @@ static int is_action(const Item* it) {
     return it->name[0] == '@';
 }
 
+/* titulo de uma parte da aba (nome "#..."): so o texto, a escolha pula por cima */
+static int is_header(const Item* it) {
+    return it != NULL && it->name[0] == '#';
+}
+
 static int item_ok(const Item* it) {
-    return is_action(it) || port_option_ptr(it->name) != NULL;
+    return is_action(it) || is_header(it) || port_option_ptr(it->name) != NULL;
 }
 
 /* opcao que nao vale agora (aparece cinza e nao muda): a resolucao com o filtro retro ligado (fica em 320x240) e a
@@ -673,6 +683,9 @@ static void retro_brightness(int from, int to) {
 static void change(const Item* it, int dir) {
     int* v;
     int x;
+    if (is_header(it)) {
+        return;
+    }
     if (is_action(it)) {
         const int which = action_id(it->name);
         if (g_restoreArmed == which && miyoo_now_ms() - g_restoreAt < 4000.0) {
@@ -782,12 +795,18 @@ void miyoo_menu_key(int k) {
     switch (k) {
         case MENU_K_UP:
             if (n > 0) {
-                *sel = (*sel + n - 1) % n;
+                int g = 0;
+                do {
+                    *sel = (*sel + n - 1) % n; /* (pula os titulos) */
+                } while (is_header(tab_item(g_tab, *sel)) && ++g < n);
             }
             break;
         case MENU_K_DOWN:
             if (n > 0) {
-                *sel = (*sel + 1) % n;
+                int g = 0;
+                do {
+                    *sel = (*sel + 1) % n;
+                } while (is_header(tab_item(g_tab, *sel)) && ++g < n);
             }
             break;
         case MENU_K_TAB_PREV:
@@ -1666,6 +1685,16 @@ void miyoo_menu_render(uint32_t* page) {
         if (isSel) {
             rrect(18, y, W - 48, ROW_H - 2, 10, TH(sel), 255);
             rrect(22, y + 7, 4, ROW_H - 16, 2, TH(accent), 255);
+        }
+        if (is_header(it)) {
+            /* titulo de uma parte da aba: texto na cor de destaque e um traco ate o fim da linha */
+            const char* t = item_label(it);
+            const int tw = big_width(t);
+            big(34, y + 1, t, TH(accent));
+            if (34 + tw + 12 < VAL_X1) {
+                rrect(34 + tw + 12, y + ROW_H / 2 - 1, VAL_X1 - (34 + tw + 12), 2, 1, TH(accent), 255);
+            }
+            continue;
         }
         vx = draw_value(it, y + 1, isSel);
         big_fit(34, vx - 14, y + 1, item_label(it), item_locked(it) ? TH(dim) : isSel ? TH(selText) : TH(text), isSel);
