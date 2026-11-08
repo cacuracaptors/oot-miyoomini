@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "gfx_priv.h"
 #include <time.h>
@@ -825,7 +826,74 @@ void gx_hr_pass_begin(void) {
     g_inBegin = 0;
 }
 
+/* DIAGNOSTICO TEMPORARIO (arquivo blocos.txt na pasta do jogo; sai depois da medicao): quantos blocos de 32x32 da
+ * imagem de cada quadro de verdade sao iguais aos do quadro de verdade anterior (pixel por pixel: o maximo que pular
+ * blocos iguais poderia economizar) */
+static int g_blkDiag = -1;
+static uint8_t *g_blkPrev;
+static int g_blkW, g_blkH;
+static unsigned g_blkN[2], g_blkHist[2][6];
+static double g_blkSum[2];
+extern int port_jump_mode __attribute__((weak));
+static void blk_diag(void) {
+    int i, bx, by, same = 0, tot = 0, m, b;
+    HrSlot *s = NULL;
+    double f;
+    if (g_blkDiag < 0) {
+        g_blkDiag = access("blocos.txt", F_OK) == 0;
+    }
+    if (!g_blkDiag || gx_hr_interm) {
+        return;
+    }
+    for (i = 0; i < HR_SLOTS; i++) {
+        if (g_slot[i].pass == g_passNo && g_slot[i].buf != NULL) {
+            s = &g_slot[i];
+        }
+    }
+    if (s == NULL) {
+        return;
+    }
+    if (g_blkPrev == NULL) {
+        g_blkPrev = (uint8_t *)malloc((size_t)HR_MAXW * HR_MAXH * 2u);
+        if (g_blkPrev == NULL) {
+            return;
+        }
+    }
+    if (s->w == g_blkW && s->h == g_blkH) {
+        for (by = 0; by < s->h; by += 32) {
+            for (bx = 0; bx < s->w; bx += 32) {
+                const int bw = (bx + 32 <= s->w ? 32 : s->w - bx) * 2;
+                int y, eq = 1;
+                for (y = by; y < by + 32 && y < s->h && eq; y++) {
+                    eq = memcmp(s->buf + ((size_t)y * s->w + bx) * 2, g_blkPrev + ((size_t)y * s->w + bx) * 2, (size_t)bw) == 0;
+                }
+                same += eq;
+                tot++;
+            }
+        }
+        m = (&port_jump_mode != NULL && port_jump_mode) ? 1 : 0;
+        f = tot ? (double)same / tot : 0.0;
+        b = f == 0.0 ? 0 : f < 0.10 ? 1 : f < 0.25 ? 2 : f < 0.50 ? 3 : f < 0.75 ? 4 : 5;
+        g_blkN[m]++;
+        g_blkSum[m] += f;
+        g_blkHist[m][b]++;
+        if ((g_blkN[0] + g_blkN[1]) % 200 == 0) {
+            for (m = 1; m >= 0; m--) {
+                fprintf(stderr, "[blocos] %s: %u quadros, blocos iguais em media %.1f%% | quadros com 0%%: %u, ate 10%%: %u, "
+                                "10-25%%: %u, 25-50%%: %u, 50-75%%: %u, 75-100%%: %u\n",
+                        m ? "jogando" : "fora (pausa, texto, cena, menus)", g_blkN[m],
+                        g_blkN[m] ? 100.0 * g_blkSum[m] / g_blkN[m] : 0.0, g_blkHist[m][0], g_blkHist[m][1],
+                        g_blkHist[m][2], g_blkHist[m][3], g_blkHist[m][4], g_blkHist[m][5]);
+            }
+        }
+    }
+    memcpy(g_blkPrev, s->buf, (size_t)s->w * s->h * 2);
+    g_blkW = s->w;
+    g_blkH = s->h;
+}
+
 void gx_hr_pass_end(double ms) {
+    blk_diag(); /* (diagnostico temporario blocos.txt) */
     int i, lvMax = 0;
     if (g_tOn) {
         gx_hr_text(0, 0, 0, 0, 0); /* (o jogo nao marcou o fim) */
