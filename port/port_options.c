@@ -91,7 +91,12 @@ int port_opt_ask_to_equip = 0;
 int port_opt_minimal_ui = 0;
 int port_tt_novoid; /* (codigo do jogo: viagem no tempo sem o dano da queda) */
 
-int port_opt_slow_walk = 1;  /* miyoo/input_miyoo.c: R2 segurado = andar devagar (toque = C-direita) */
+/* teclas personalizaveis (opcoes button_*_tap / _hold; port/miyoo/input_miyoo.c): por botao (A, B, X, Y, L1, R1, L2, R2,
+ * START, SELECT) a acao do toque e a de segurar. Os valores iniciais sao os da tabela k_padrao */
+int port_opt_btn[20] = { 1, 1, 3, 3, 9, 9, 2, 2, 4, 4, 5, 5, 10, 10, 11, 12, 7, 7, 8, 0 };
+/* as opcoes antigas manual_jump, jump_on_b e slow_walk (ate o lote 196): so lidas de um options.txt antigo, para
+ * montar as teclas iguais (port_options_load) */
+static int g_oldJump = -1, g_oldJumpB = -1, g_oldSlow = -1, g_sawButtons;
 int port_opt_ledge_grab = 1; /* z_player.c: 0 = ao sair andando de uma beirada, cai em vez de se agarrar nela */
 int port_opt_air_steering = 1; /* z_player.c: direcao no ar (Port_AirSteer) */
 int port_opt_better_roll = 0; /* z_player.c: rolada encadeada e com direcao */
@@ -139,8 +144,8 @@ int port_opt_cheat_no_item_restrictions = 0;
 int port_opt_cheat_disable_sandstorm = 0;
 int port_opt_cheat_moon_jump_on_l = 0;
 int port_input_select_a;
-int port_opt_manual_jump = 1, port_opt_jump_on_b = 1;
-int port_opt_auto_jump = 1; /* 0 (com manual_jump) = Link nao pula sozinho nas beiradas (z_player.c) */
+int port_opt_manual_jump = 1; /* algum botao e o pulo (input_miyoo.c calcula pelas teclas; z_player.c le) */
+int port_opt_auto_jump = 1; /* 0 (com um botao de pulo) = Link nao pula sozinho nas beiradas (z_player.c) */
 int port_opt_sprint_speed = 150;
 int port_opt_jump_strength = 56; /* forca minima do pulo manual (x10) */ /* corrida segurando A depois da rolada (%) */ /* pulo manual (input_miyoo.c, z_player.c) */
 int port_input_jump, port_input_frames, port_jump_stamp, port_jump_mode;
@@ -231,16 +236,51 @@ static const struct {
       "1 = when aiming and in first person (C-Up, slingshot, bow...) pressing up looks up; 0 = like the original (inverted)" },
     { "Controls", "smooth_aiming", "mira_suave", &port_opt_mira_suave,
       "1 = when aiming and in first person the D-pad accelerates gradually (a tap moves a little, holding speeds up); 0 = like the original" },
-    { "Controls", "manual_jump", "", &port_opt_manual_jump,
-      "1 = manual jump button (see jump_on_b); a tap on SELECT is C-Up and SELECT+L1 toggles the minimap (L). 0 = original layout (Y = C-Left, X = C-Down, R2 = C-Right, L2 = C-Up, B = sword, SELECT tap = minimap)" },
-    { "Controls", "jump_on_b", "", &port_opt_jump_on_b,
-      "with manual_jump: 1 = B jumps, Y is the sword (N64 B), items on L2 (C-Left), X (C-Down) and R2 (C-Right); 0 = X jumps, B is the sword, items on Y (C-Left), L2 (C-Down) and R2 (C-Right). In menus, text boxes and outside gameplay the jump button works as B" },
+    /* teclas personalizaveis (port/miyoo/input_miyoo.c): o que cada botao faz num toque e segurado (lote 197) */
+    { "Controls", "button_a_tap", "", &port_opt_btn[0],
+      "what each button does. button_N_tap: a quick tap (released within half a second, without another button with it); button_N_hold: held half a second or more. 0 = nothing, 1 = A, 2 = B (sword), 3 = jump (B in menus, text boxes and outside gameplay), 4 = Z (target), 5 = R (shield), 6 = L (minimap), 7 = START, 8 = C-Up, 9 = C-Down, 10 = C-Left, 11 = C-Right, 12 = walk slowly. The same number for tap and hold = the button works at once, like a normal button (no waiting). SELECT+another button are the fixed shortcuts (brightness, minimap, tunic/boots...), and MENU is not changeable" },
+    { "Controls", "button_a_hold", "", &port_opt_btn[1],
+      "A held (see button_a_tap)" },
+    { "Controls", "button_b_tap", "", &port_opt_btn[2],
+      "B tapped (see button_a_tap)" },
+    { "Controls", "button_b_hold", "", &port_opt_btn[3],
+      "B held (see button_a_tap)" },
+    { "Controls", "button_x_tap", "", &port_opt_btn[4],
+      "X tapped (see button_a_tap)" },
+    { "Controls", "button_x_hold", "", &port_opt_btn[5],
+      "X held (see button_a_tap)" },
+    { "Controls", "button_y_tap", "", &port_opt_btn[6],
+      "Y tapped (see button_a_tap)" },
+    { "Controls", "button_y_hold", "", &port_opt_btn[7],
+      "Y held (see button_a_tap)" },
+    { "Controls", "button_l1_tap", "", &port_opt_btn[8],
+      "L1 tapped (see button_a_tap)" },
+    { "Controls", "button_l1_hold", "", &port_opt_btn[9],
+      "L1 held (see button_a_tap)" },
+    { "Controls", "button_r1_tap", "", &port_opt_btn[10],
+      "R1 tapped (see button_a_tap)" },
+    { "Controls", "button_r1_hold", "", &port_opt_btn[11],
+      "R1 held (see button_a_tap)" },
+    { "Controls", "button_l2_tap", "", &port_opt_btn[12],
+      "L2 tapped (see button_a_tap)" },
+    { "Controls", "button_l2_hold", "", &port_opt_btn[13],
+      "L2 held (see button_a_tap)" },
+    { "Controls", "button_r2_tap", "", &port_opt_btn[14],
+      "R2 tapped (see button_a_tap)" },
+    { "Controls", "button_r2_hold", "", &port_opt_btn[15],
+      "R2 held (see button_a_tap)" },
+    { "Controls", "button_start_tap", "", &port_opt_btn[16],
+      "START tapped (see button_a_tap)" },
+    { "Controls", "button_start_hold", "", &port_opt_btn[17],
+      "START held (see button_a_tap)" },
+    { "Controls", "button_select_tap", "", &port_opt_btn[18],
+      "SELECT tapped (see button_a_tap)" },
+    { "Controls", "button_select_hold", "", &port_opt_btn[19],
+      "SELECT held (see button_a_tap)" },
     { "Controls", "auto_jump", "", &port_opt_auto_jump,
-      "with manual_jump: 1 = Link also jumps by himself when he runs off a ledge (like the original); 0 = no automatic jump: he falls off the ledge, and only the jump button jumps" },
+      "with a jump button (button_*): 1 = Link also jumps by himself when he runs off a ledge (like the original); 0 = no automatic jump: he falls off the ledge, and only the jump button jumps" },
     { "Controls", "jump_strength", "", &port_opt_jump_strength,
       "manual jump: minimum jump strength x10 (56 = 5.6; higher = taller jump). The running jump uses the game's own value when it is stronger" },
-    { "Controls", "slow_walk", "", &port_opt_slow_walk,
-      "1 = holding R2 makes Link walk slowly (a quick tap on R2 is still the C-Right item, like the slingshot); 0 = R2 is only C-Right" },
     { "Controls", "ledge_grab", "", &port_opt_ledge_grab,
       "1 = like the original: walking off a ledge, Link grabs the edge and hangs from it; 0 = he just falls (useful with the manual jump and the automatic jump off). Vines, ladders and grabbing a ledge in mid-air still work" },
     { "Controls", "air_steering", "", &port_opt_air_steering,
@@ -634,6 +674,15 @@ static int read_file(const char* path, int legacy) {
                 *k_opts[i].var = v;
             }
         }
+        if (!strncmp(name, "button_", 7)) {
+            g_sawButtons = 1;
+        } else if (!strcmp(name, "manual_jump")) {
+            g_oldJump = v;
+        } else if (!strcmp(name, "jump_on_b")) {
+            g_oldJumpB = v;
+        } else if (!strcmp(name, "slow_walk")) {
+            g_oldSlow = v;
+        }
     }
     fclose(f);
     return 1;
@@ -710,11 +759,28 @@ static const struct {
     { "rumble", 1 },
     { "natural_aiming", 1 },
     { "smooth_aiming", 1 },
-    { "manual_jump", 1 },
-    { "jump_on_b", 1 },
+    { "button_a_tap", 1 },
+    { "button_a_hold", 1 },
+    { "button_b_tap", 3 },
+    { "button_b_hold", 3 },
+    { "button_x_tap", 9 },
+    { "button_x_hold", 9 },
+    { "button_y_tap", 2 },
+    { "button_y_hold", 2 },
+    { "button_l1_tap", 4 },
+    { "button_l1_hold", 4 },
+    { "button_r1_tap", 5 },
+    { "button_r1_hold", 5 },
+    { "button_l2_tap", 10 },
+    { "button_l2_hold", 10 },
+    { "button_r2_tap", 11 },
+    { "button_r2_hold", 12 },
+    { "button_start_tap", 7 },
+    { "button_start_hold", 7 },
+    { "button_select_tap", 8 },
+    { "button_select_hold", 0 },
     { "auto_jump", 1 },
     { "jump_strength", 70 },
-    { "slow_walk", 1 },
     { "ledge_grab", 1 },
     { "air_steering", 1 },
     { "sprint_speed", 150 },
@@ -978,6 +1044,22 @@ void port_options_load(const char* path) {
     }
     g_optPath = path;
     read_file(path, 1);
+    if (!g_sawButtons && (g_oldJump >= 0 || g_oldJumpB >= 0 || g_oldSlow >= 0)) {
+        /* options.txt de antes das teclas personalizaveis: as teclas ficam como estavam (pulo manual ou nao, pulo no B
+         * ou no X, R2 segurado andando devagar ou nao) */
+        static const int k_noJump[20] = { 1, 1, 2, 2, 9, 9, 10, 10, 4, 4, 5, 5, 8, 8, 11, 12, 7, 7, 6, 0 };
+        static const int k_jumpX[20] = { 1, 1, 2, 2, 3, 3, 10, 10, 4, 4, 5, 5, 9, 9, 11, 12, 7, 7, 8, 0 };
+        if (g_oldJump == 0) {
+            memcpy(port_opt_btn, k_noJump, sizeof k_noJump);
+        } else if (g_oldJumpB == 0) {
+            memcpy(port_opt_btn, k_jumpX, sizeof k_jumpX);
+        }
+        if (g_oldSlow == 0) {
+            port_opt_btn[15] = 11; /* R2 segurado: C-direita, como o toque */
+        }
+        fprintf(stderr, "opcoes: teclas montadas das opcoes antigas (manual_jump %d, jump_on_b %d, slow_walk %d)\n",
+                g_oldJump, g_oldJumpB, g_oldSlow);
+    }
     write_default(path); /* reescreve com os valores lidos: opcoes novas aparecem no arquivo */
     {
         extern void gx_hr_sync_opts(void); /* gfx_hires.c: resolucao em uso (filtro retro) */

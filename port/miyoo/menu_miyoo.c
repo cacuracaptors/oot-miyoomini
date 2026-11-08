@@ -77,11 +77,31 @@ static const Item k_items[] = {
     R(TAB_CONTROLS, "dpad_smooth_turn", "Smooth D-pad turn (ms)", "Direcional suave (ms)", 0, 200, 10),
     T(TAB_CONTROLS, "natural_aiming", "Natural aiming (up looks up)", "Mira natural (cima olha p/ cima)"),
     T(TAB_CONTROLS, "smooth_aiming", "Smooth aiming", "Mira suave"),
-    T(TAB_CONTROLS, "manual_jump", "Manual jump button", "Botão de pulo"),
+    /* teclas personalizaveis (lote 197): toque e segurado de cada botao (input_miyoo.c); o nome vem de key_label */
+    R(TAB_CONTROLS, "button_a_tap", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_a_hold", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_b_tap", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_b_hold", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_x_tap", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_x_hold", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_y_tap", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_y_hold", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_l1_tap", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_l1_hold", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_r1_tap", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_r1_hold", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_l2_tap", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_l2_hold", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_r2_tap", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_r2_hold", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_start_tap", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_start_hold", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_select_tap", "", "", 0, 12, 1),
+    R(TAB_CONTROLS, "button_select_hold", "", "", 0, 12, 1),
+    { TAB_CONTROLS, "@keys", "Default buttons", "Teclas padrão", -1, -1, 0, 0 },
     T(TAB_CONTROLS, "auto_jump", "Automatic jump", "Pulo automático"),
     R(TAB_CONTROLS, "jump_strength", "Jump strength (x10)", "Força do pulo (x10)", 40, 120, 2),
     T(TAB_CONTROLS, "air_steering", "Mid-air steering", "Direção no ar"),
-    T(TAB_CONTROLS, "slow_walk", "R2 held: walk slowly", "R2 segurado: andar devagar"),
     T(TAB_CONTROLS, "ledge_grab", "Grab ledges when walking off", "Agarrar a borda ao sair dela"),
     R(TAB_CONTROLS, "sprint_speed", "Sprint speed (%)", "Corrida (% da velocidade)", 100, 250, 10),
     T(TAB_CONTROLS, "quick_gear_swap", "SELECT+Left/Right: tunic/boots", "SELECT+esq./dir.: túnica/botas"),
@@ -288,8 +308,32 @@ static const MenuTexto* texto(const char* name) {
     return NULL;
 }
 
+/* teclas personalizaveis: "A: toque" / "A: segurar" (o nome do botao e igual em todos os idiomas) */
+static const char* key_label(const Item* it) {
+    static char buf[24][64];
+    static int next;
+    static const char* const k_keys[][2] = { { "a", "A" },   { "b", "B" },   { "x", "X" },         { "y", "Y" },
+                                             { "l1", "L1" }, { "r1", "R1" }, { "l2", "L2" },       { "r2", "R2" },
+                                             { "start", "START" },           { "select", "SELECT" } };
+    const char* p = it->name + 7; /* (depois de "button_") */
+    const char* u = strrchr(p, '_');
+    char* b = buf[next++ % 24];
+    const char* kn = "?";
+    int i;
+    for (i = 0; u != NULL && i < (int)(sizeof k_keys / sizeof k_keys[0]); i++) {
+        if (strlen(k_keys[i][0]) == (size_t)(u - p) && !strncmp(p, k_keys[i][0], (size_t)(u - p))) {
+            kn = k_keys[i][1];
+        }
+    }
+    snprintf(b, 64, "%s: %s", kn, u != NULL && !strcmp(u, "_hold") ? tr("hold", "segurar") : tr("tap", "toque"));
+    return b;
+}
+
 static const char* item_label(const Item* it) {
     const MenuTexto* t;
+    if (!strncmp(it->name, "button_", 7)) {
+        return key_label(it);
+    }
     if (lang() == 2) {
         if (it->name[0] == '@') {
             return tr(it->en, it->pt);
@@ -312,6 +356,23 @@ static const char* item_label(const Item* it) {
 static const char* item_help(const Item* it) {
     const MenuTexto* t = texto(it->name);
     int i;
+    if (!strncmp(it->name, "button_", 7)) {
+        const char* u = strrchr(it->name, '_');
+        if (u != NULL && !strcmp(u, "_hold")) {
+            return tr("What this button does when held for half a second or more; it lasts while the button stays pressed "
+                      "(walk slowly, shield...). When tap and hold do the same thing, the button works at once, like a "
+                      "normal button.",
+                      "O que este botão faz segurado por meio segundo ou mais; vale enquanto ele continuar apertado (andar "
+                      "devagar, escudo...). Quando o toque e o segurar fazem a mesma coisa, o botão vale na hora, como um "
+                      "botão comum.");
+        }
+        return tr("What a quick tap on this button does: pressed and released within half a second, with no other "
+                  "button. When tap and hold do the same thing, the button works at once, like a normal button. Shortcuts "
+                  "with SELECT held (brightness, minimap, tunic and boots) don't change.",
+                  "O que um toque rápido neste botão faz: apertado e solto em menos de meio segundo, sem outro botão "
+                  "junto. Quando o toque e o segurar fazem a mesma coisa, o botão vale na hora, como um botão comum. Os "
+                  "atalhos com SELECT segurado (brilho, minimapa, túnica e botas) não mudam.");
+    }
     if (lang() >= 3 && t != NULL) {
         const char* h = lang() == 3 ? t->de_help : lang() == 4 ? t->fr_help : t->it_help;
         if (h[0] != 0) {
@@ -417,7 +478,7 @@ static int g_changed;
 static int g_restoreArmed; /* "Restaurar padrao" / "Sair" / "Reiniciar": o 1o A pede confirmacao, o 2o faz (1 restaurar,
                             * 2 sair, 3 reiniciar) */
 static int action_id(const char* name) {
-    return !strcmp(name, "@quit") ? 2 : !strcmp(name, "@reset") ? 3 : 1;
+    return !strcmp(name, "@quit") ? 2 : !strcmp(name, "@reset") ? 3 : !strcmp(name, "@keys") ? 4 : 1;
 }
 static int g_confirm; /* pergunta na tela: uma opcao que so vale reiniciando mudou; reiniciar agora ou cancelar */
 static int g_openVal[256];  /* valores ao abrir o menu (para saber se uma opcao de reiniciar mudou) */
@@ -455,6 +516,21 @@ static void restore_defaults(void) {
     port_options_default_diagnostics();
     g_changed = 1;
     fprintf(stderr, "menu: padrao restaurado (%d opcoes mudaram)\n", n);
+}
+
+/* "Teclas padrao": so os botoes (toque e segurado) voltam ao esquema do port */
+static void restore_keys(void) {
+    int i, n = 0;
+    for (i = 0; i < NITEMS; i++) {
+        int* v = strncmp(k_items[i].name, "button_", 7) ? NULL : port_option_ptr(k_items[i].name);
+        int d;
+        if (v != NULL && port_option_default(k_items[i].name, &d) && *v != d) {
+            *v = d;
+            n++;
+        }
+    }
+    g_changed = 1;
+    fprintf(stderr, "menu: teclas padrao (%d opcoes mudaram)\n", n);
 }
 
 int miyoo_menu_active(void) {
@@ -603,6 +679,8 @@ static void change(const Item* it, int dir) {
             g_restoreArmed = 0;
             if (which == 1) {
                 restore_defaults();
+            } else if (which == 4) {
+                restore_keys();
             } else if (which == 3) {
                 /* reiniciar do comeco (abertura), como o reset do N64; salva antes, como o "Sair" */
                 close_menu(0);
@@ -1183,6 +1261,9 @@ static void big_fit(int x0, int x1, int y, const char* s, uint32_t c, int roll) 
 /* nomes para opcoes de poucos valores (em vez do numero): menu_textos.h k_choices */
 static const char* choice_name(const char* opt, int v) {
     int i;
+    if (!strncmp(opt, "button_", 7)) {
+        opt = "button_action"; /* (as acoes das teclas: a mesma lista para todos os botoes) */
+    }
     for (i = 0; i < (int)(sizeof k_choices / sizeof k_choices[0]); i++) {
         if (!strcmp(k_choices[i].name, opt)) {
             if (v < 0 || v >= k_choices[i].n) {
@@ -1600,6 +1681,12 @@ void miyoo_menu_render(uint32_t* page) {
                                  "N64 reset button. Press A twice.",
                                  "Salva o jogo (salvar sozinho) e começa de novo do início, com a abertura, como o botão de "
                                  "reset do N64. Aperte A duas vezes.")
+                        : (is_action(it) && !strcmp(it->name, "@keys"))
+                            ? tr("Every button goes back to the port's layout: B jump, Y sword, L2 / X / R2 C-Left / C-Down / "
+                                 "C-Right (R2 held: walk slowly), SELECT tap C-Up, L1 Z, R1 R. Press A twice.",
+                                 "Todos os botões voltam ao esquema do port: B pulo, Y espada, L2 / X / R2 C-esquerda / "
+                                 "C-baixo / C-direita (R2 segurado: andar devagar), toque no SELECT C-cima, L1 Z, R1 R. "
+                                 "Aperte A duas vezes.")
                         : (is_action(it) && !strcmp(it->name, "@quit"))
                             ? tr("Saves the game (autosave) and quits, without the Game Switcher. Press A twice.",
                                  "Salva o jogo (salvar sozinho) e sai, sem o Game Switcher. Aperte A duas vezes.")

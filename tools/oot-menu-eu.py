@@ -693,9 +693,17 @@ UI_EU = {
 "Save failed": ("Speichern fehlgeschlagen", "Échec de la sauvegarde"),
 "State %d loaded": ("Stand %d geladen", "État %d chargé"),
 "Saved to state %d": ("In Stand %d gespeichert", "Sauvé dans l'état %d"),
+# teclas personalizaveis (lote 197)
+'tap': ('Tippen', 'appui court'),
+'hold': ('Halten', 'appui long'),
+'Default buttons': ('Standardtasten', 'Boutons par défaut'),
+"What a quick tap on this button does: pressed and released within half a second, with no other button. When tap and hold do the same thing, the button works at once, like a normal button. Shortcuts with SELECT held (brightness, minimap, tunic and boots) don't change.": ('Was ein kurzes Tippen auf diese Taste macht: gedrückt und innerhalb einer halben Sekunde losgelassen, ohne andere Taste. Machen Tippen und Halten dasselbe, reagiert die Taste sofort wie eine normale Taste. Die Kürzel mit gehaltenem SELECT (Helligkeit, Minikarte, Tunika und Stiefel) bleiben gleich.', "Ce que fait un appui court sur ce bouton : pressé et relâché en moins d'une demi-seconde, sans autre bouton. Quand l'appui court et l'appui long font la même chose, le bouton réagit tout de suite, comme un bouton normal. Les raccourcis avec SELECT maintenu (luminosité, mini-carte, tunique et bottes) ne changent pas."),
+'What this button does when held for half a second or more; it lasts while the button stays pressed (walk slowly, shield...). When tap and hold do the same thing, the button works at once, like a normal button.': ('Was diese Taste macht, wenn sie eine halbe Sekunde oder länger gehalten wird; es hält an, solange sie gedrückt bleibt (langsam gehen, Schild...). Machen Tippen und Halten dasselbe, reagiert die Taste sofort wie eine normale Taste.', "Ce que fait ce bouton maintenu une demi-seconde ou plus ; cela dure tant qu'il reste enfoncé (marcher lentement, bouclier...). Quand l'appui court et l'appui long font la même chose, le bouton réagit tout de suite, comme un bouton normal."),
+"Every button goes back to the port's layout: B jump, Y sword, L2 / X / R2 C-Left / C-Down / C-Right (R2 held: walk slowly), SELECT tap C-Up, L1 Z, R1 R. Press A twice.": ('Alle Tasten gehen auf die Belegung des Ports zurück: B Springen, Y Schwert, L2 / X / R2 C-links / C-unten / C-rechts (R2 halten: langsam gehen), SELECT tippen C-oben, L1 Z, R1 R. Zweimal A drücken.', 'Tous les boutons reviennent à la disposition du port : B saut, Y épée, L2 / X / R2 C-gauche / C-bas / C-droite (R2 maintenu : marcher lentement), appui court sur SELECT C-haut, L1 Z, R1 R. Appuyez deux fois sur A.'),
 }
 
 CH_EU = {
+"button_action": (['Nichts', 'A', 'B (Schwert)', 'Springen', 'Z (Anvisieren)', 'R (Schild)', 'L (Minikarte)', 'START', 'C-oben', 'C-unten', 'C-links', 'C-rechts', 'Langsam gehen'], ['Rien', 'A', 'B (épée)', 'Saut', 'Z (viser)', 'R (bouclier)', 'L (mini-carte)', 'START', 'C-haut', 'C-bas', 'C-gauche', 'C-droite', 'Marcher lentement']),
 "menu_theme": (["Dunkelgrün und Gold", "Hell"], ["Vert foncé et or", "Clair"]),
 "sleeping_waterfall": (["Immer spielen", "Einmal spielen", "Nicht nötig"], ["Toujours jouer", "Jouer une fois", "Pas besoin"]),
 "retro_filter": (["Aus", "Linien", "Linien und Maske"], ["Non", "Lignes", "Lignes et masque"]),

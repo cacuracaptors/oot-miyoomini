@@ -561,6 +561,16 @@ UI.update({
 "A saves here (press A again to overwrite).": "Aでここにセーブ（もう一度Aで上書き）。",
 })
 
+# teclas personalizaveis (lote 197)
+UI.update({
+'tap': '押す',
+'hold': '長押し',
+'Default buttons': 'ボタンを初期設定に',
+"What a quick tap on this button does: pressed and released within half a second, with no other button. When tap and hold do the same thing, the button works at once, like a normal button. Shortcuts with SELECT held (brightness, minimap, tunic and boots) don't change.": 'このボタンを短く押したとき（0.5秒以内に離す、ほかのボタンなし）の動作。押すと長押しが同じなら、普通のボタンのようにすぐ反応します。SELECTを押しながらのショートカット（明るさ、ミニマップ、服とブーツ）は変わりません。',
+'What this button does when held for half a second or more; it lasts while the button stays pressed (walk slowly, shield...). When tap and hold do the same thing, the button works at once, like a normal button.': 'このボタンを0.5秒以上押し続けたときの動作。押している間ずっと続きます（ゆっくり歩く、盾…）。押すと長押しが同じなら、普通のボタンのようにすぐ反応します。',
+"Every button goes back to the port's layout: B jump, Y sword, L2 / X / R2 C-Left / C-Down / C-Right (R2 held: walk slowly), SELECT tap C-Up, L1 Z, R1 R. Press A twice.": 'すべてのボタンを初期設定に戻します：Bジャンプ、Y剣、L2／X／R2＝C左／C下／C右（R2長押し：ゆっくり歩く）、SELECTを押す＝C上、L1＝Z、R1＝R。Aを2回押してください。',
+})
+
 # opcoes de poucos valores: o nome de cada valor no menu (em vez do numero). (ingles, portugues, japones)
 CH = {
 "menu_theme": [("Dark green and gold", "Verde escuro e dourado", "深緑と金"), ("Light", "Claro", "明るい色")],
@@ -570,6 +580,7 @@ CH = {
 "dither": [("Off", "Não", "なし"), ("Uniform", "Uniforme", "均一"), ("Like the console", "Como o console", "実機と同じ")],
 "texture_filter": [("Exact", "Exato", "正確"), ("Light", "Leve", "軽量"), ("4x4 table", "Tabela 4x4", "４ｘ４表")],
 "close_filter_mode": [("Exact (N64)", "Exato (N64)", "正確（Ｎ６４）"), ("4x4 table", "Tabela 4x4", "４ｘ４表")],
+"button_action": [('Nothing', 'Nada', 'なし'), ('A', 'A', 'A'), ('B (sword)', 'B (espada)', 'B（剣）'), ('Jump', 'Pulo', 'ジャンプ'), ('Z (target)', 'Z (mirar)', 'Z（注目）'), ('R (shield)', 'R (escudo)', 'R（盾）'), ('L (minimap)', 'L (minimapa)', 'L（ミニマップ）'), ('START', 'START', 'START'), ('C-Up', 'C-cima', 'C上'), ('C-Down', 'C-baixo', 'C下'), ('C-Left', 'C-esquerda', 'C左'), ('C-Right', 'C-direita', 'C右'), ('Walk slowly', 'Andar devagar', 'ゆっくり歩く')],
 "cheat_deku_stick": [("Off", "Não", "なし"), ("Unbreakable", "Inquebrável", "折れない"),
                      ("Unbreakable, on fire", "Inquebrável, em chamas", "折れない＋火")],
 }
@@ -682,7 +693,7 @@ def main():
     for k, v in EN_MENU.items():
         o.write("    { \"%s\", %s },\n" % (k, c_str(v, "utf-8")))
     o.write("};\n\n/* opcoes de poucos valores: o nome de cada valor (ingles, portugues UTF-8, japones) */\n")
-    o.write("typedef struct {\n    const char* name;\n    int n;\n    const char *en[4], *pt[4], *jp[4], *de[4], *fr[4], *it[4];\n} MenuChoice;\n")
+    o.write("typedef struct {\n    const char* name;\n    int n;\n    const char *en[16], *pt[16], *jp[16], *de[16], *fr[16], *it[16];\n} MenuChoice;\n")
     o.write("static const MenuChoice k_choices[] = {\n")
     for k, ch in CH.items():
         de, fr = CH_EU[k]

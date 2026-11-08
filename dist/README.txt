@@ -49,9 +49,11 @@ CONTROLS
                                 game, as set in OnionOS Tweaks (the state
                                 is saved first)
 
-With the manual jump turned off (Menu+Start > Controls) the buttons are the
-original ones: B is the sword, Y C-Left, X C-Down, R2 C-Right, L2 C-Up.
-With "Jump on B" off, X jumps and B is the sword.
+Every button except Menu can be changed in Menu+Start > Controls, with one
+action for a quick tap and another for holding it (half a second or more).
+A button with the same action for both works at once, like a normal button.
+"Default buttons" brings back the layout above. The Select+button shortcuts
+don't change.
 PLAYING THE OCARINA
 -------------------
 While the ocarina is out, the buttons change so that every note is easy to

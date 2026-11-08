@@ -383,9 +383,17 @@ UI_IT = {
     "Save failed": "Salvataggio non riuscito",
     "State %d loaded": "Stato %d caricato",
     "Saved to state %d": "Salvato nello stato %d",
+    # teclas personalizaveis (lote 197)
+    'tap': 'tocco',
+    'hold': 'tenuto',
+    'Default buttons': 'Tasti predefiniti',
+    "What a quick tap on this button does: pressed and released within half a second, with no other button. When tap and hold do the same thing, the button works at once, like a normal button. Shortcuts with SELECT held (brightness, minimap, tunic and boots) don't change.": 'Cosa fa un tocco rapido su questo tasto: premuto e rilasciato entro mezzo secondo, senza altri tasti. Quando tocco e tenuto fanno la stessa cosa, il tasto risponde subito, come un tasto normale. Le scorciatoie con SELECT tenuto (luminosità, minimappa, tunica e stivali) non cambiano.',
+    'What this button does when held for half a second or more; it lasts while the button stays pressed (walk slowly, shield...). When tap and hold do the same thing, the button works at once, like a normal button.': 'Cosa fa questo tasto tenuto premuto per mezzo secondo o più; dura finché resta premuto (camminare piano, scudo...). Quando tocco e tenuto fanno la stessa cosa, il tasto risponde subito, come un tasto normale.',
+    "Every button goes back to the port's layout: B jump, Y sword, L2 / X / R2 C-Left / C-Down / C-Right (R2 held: walk slowly), SELECT tap C-Up, L1 Z, R1 R. Press A twice.": 'Tutti i tasti tornano alla disposizione del port: B salto, Y spada, L2 / X / R2 C-sinistra / C-giù / C-destra (R2 tenuto: camminare piano), tocco su SELECT C-su, L1 Z, R1 R. Premete A due volte.',
 }
 
 CH_IT = {
+    "button_action": ['Niente', 'A', 'B (spada)', 'Salto', 'Z (mira)', 'R (scudo)', 'L (minimappa)', 'START', 'C-su', 'C-giù', 'C-sinistra', 'C-destra', 'Camminare piano'],
     "menu_theme": ["Verde scuro e oro", "Chiaro"],
     "sleeping_waterfall": ["Suonare sempre", "Suonare una volta", "Non serve"],
     "retro_filter": ["No", "Linee", "Linee e maschera"],

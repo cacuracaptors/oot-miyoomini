@@ -4,15 +4,12 @@
  * Le direto do evdev (/dev/input/event0), como no port do Mario Kart 64, toda vez
  * que o jogo pede os controles (osContStartReadData, uma vez por quadro).
  *
- *   (com manual_jump = 1, o padrao)
+ *   Teclas personalizaveis (lote 197; opcoes button_*_tap / button_*_hold, menu Controles): cada botao (menos o MENU)
+ *   tem uma acao num toque (solto em menos de 0,5 s, sem outro botao junto) e outra segurado (0,5 s ou mais). Padrao:
  *   A -> A                   B -> pulo (no jogo; nos menus/textos e o B)    Y -> B (espada)
- *   L2 -> C-esquerda         X -> C-baixo          R2 -> C-direita     toque no SELECT -> C-cima
- *   SELECT+L1 -> L (minimapa)       (jump_on_b = 0: X pula, B espada, Y C-esquerda, L2 C-baixo)
- *   (com manual_jump = 0, como antes)
- *   A -> A                   B -> B
- *   Y -> C-esquerda          X -> C-baixo          R2 -> C-direita     L2 -> C-cima
- *   L1 -> Z (mirar)          R1 -> R (escudo)
- *   START -> START           SELECT (um toque, sozinho) -> L (liga/desliga o mapa)
+ *   L2 -> C-esquerda         X -> C-baixo          R2 -> C-direita (segurado: andar devagar)
+ *   toque no SELECT -> C-cima          L1 -> Z (mirar)          R1 -> R (escudo)
+ *   START -> START           SELECT+L1 -> L (minimapa)
  *   SELECT segurado + direcional -> direcional do N64 (o port usa: direita troca as botas,
  *   esquerda troca a tunica; opcao atalho_roupa)
  *   direcional -> analogico (o OoT de varejo nao usa o D-pad do N64)
@@ -24,7 +21,6 @@
  *   MENU+R2 / MENU+L2: salva / carrega o estado rapido (saves/state_quick.oss).
  *   SELECT+A segurados: pulo da lua (so com o cheat cheat_moon_jump_on_l).
  *   SELECT+Y: grava o proximo quadro (captura_NN.cap e .png) para depurar defeitos de imagem.
- *   R2 segurado (opcao slow_walk): andar devagar; um toque no R2 continua sendo o C-direita.
  *   SELECT+R1: grava a medicao detalhada dos nucleos (perf_NN.bin; so com a opcao perf_trace).
  */
 #include <fcntl.h>
@@ -43,8 +39,8 @@ extern int port_opt_cheat_moon_jump_on_l, port_input_select_a; /* port_options.c
 extern int gx_brilho;            /* gfx/gfx_rdp.c */
 extern int port_opt_segurar_b, port_text_open, port_text_choice; /* port_options.c */
 void port_options_save(void);     /* port_options.c */
-extern int port_opt_slow_walk; /* port_options.c: R2 segurado = andar devagar */
-static int port_input_slow;    /* R2 segurado agora (slow_walk) */
+extern int port_opt_btn[20]; /* port_options.c: teclas personalizaveis (toque e segurado de cada botao) */
+static int port_input_slow;    /* andar devagar agora (acao 12 de algum botao) */
 /* andar devagar: o jogo tira 7 de cada eixo (zona morta do PadUtils_UpdateRelXY) e so anda com a forca (raiz de
  * x^2+y^2 dos eixos ja descontados) acima de 20. SLOW_REL e essa forca ja descontada; slow_axis devolve o valor cru
  * do eixo que da a componente pedida depois do desconto (assim as diagonais tambem andam). */
@@ -55,9 +51,30 @@ static signed char slow_axis(float c) {
     }
     return (signed char)(c > 0 ? lrintf(c) + 7 : lrintf(c) - 7);
 }
-extern int port_opt_manual_jump, port_opt_jump_on_b, port_input_jump, port_input_frames, port_jump_stamp, port_jump_mode;
+extern int port_opt_manual_jump, port_input_jump, port_input_frames, port_jump_stamp, port_jump_mode;
 
 enum { K_UP, K_DOWN, K_LEFT, K_RIGHT, K_A, K_B, K_X, K_Y, K_L1, K_R1, K_L2, K_R2, K_START, K_SELECT, K_MENU, K_COUNT };
+
+/* teclas personalizaveis: as acoes (os numeros das opcoes button_*_tap / _hold) */
+enum { ACT_NONE, ACT_A, ACT_B, ACT_JUMP, ACT_Z, ACT_R, ACT_L, ACT_START, ACT_CUP, ACT_CDOWN, ACT_CLEFT, ACT_CRIGHT, ACT_SLOW,
+       ACT_COUNT };
+#define NBTN 10
+static const int k_btnKey[NBTN] = { K_A, K_B, K_X, K_Y, K_L1, K_R1, K_L2, K_R2, K_START, K_SELECT }; /* (ordem das opcoes) */
+#define BTN_HOLD_MS 500  /* segurado a partir daqui; antes disso (e solto) e um toque (o SELECT do port do Fallout) */
+#define BTN_PULSE_MS 120 /* o toque fica apertado para o jogo esse tempo (ele le os controles a 20 Hz) */
+typedef struct {
+    long long t0, pulseUntil;
+    int was, combo, holding, pulseAct;
+} BtnState;
+static BtnState g_btn[NBTN];
+static int btn_act(int v) {
+    return v >= 0 && v < ACT_COUNT ? v : ACT_NONE;
+}
+static long long mono_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
 
 int port_opt_direcional_suave = 40; /* opcoes.txt: ms para a direcao girar 45 graus (0 = desligado) */
 static int ev_fd = -1;
@@ -264,51 +281,109 @@ static void read_pads(OSContPad pads[4]) {
     port_ss_input_tick(); /* MENU, bateria no fim e desligar viram pedidos ao jogo (port/savestate.c) */
     miyoo_rumble_tick();  /* (o motor nunca fica ligado mais de 3 s seguidos) */
 
-    /* pulo manual (opcao manual_jump): um botao vira o pulo durante o jogo (o jogo avisa em port_jump_mode, a cada
-     * quadro, quando Link pode agir: fora do menu de pausa e sem caixa de texto); nos menus, textos e telas fora do
-     * jogo ele volta a ser o B do N64 (cancelar, passar texto). Com o pulo, L2 vira C-baixo, o toque no SELECT vira
-     * C-cima e SELECT+baixo liga/desliga o minimapa (L). jump_on_b = 1: B pula, Y e a espada, L2 C-esquerda, X C-baixo; 0: X pula, B espada, Y C-esquerda, L2 C-baixo. */
-    int jumpOn = port_opt_manual_jump != 0;
-    int jumpKey = port_opt_jump_on_b ? K_B : K_X, swordKey = port_opt_jump_on_b ? K_Y : K_B;
-    /* itens: com o pulo no B, C-esquerda no L2 e C-baixo no X (C-direita no R2, como antes) */
-    int cleftKey = (jumpOn && port_opt_jump_on_b) ? K_L2 : K_Y;
-    int cdownKey = !jumpOn ? K_X : port_opt_jump_on_b ? K_X : K_L2;
-    int inPlay;
-    port_input_frames++;
-    inPlay = jumpOn && port_jump_mode && (port_input_frames - port_jump_stamp) <= 12; /* (leituras a 60 Hz, jogo a 20) */
+    /* teclas personalizaveis (opcoes button_*_tap / button_*_hold, port_options.c; menu Controles): cada botao (A, B, X,
+     * Y, L1, R1, L2, R2, START, SELECT) tem uma acao no toque e outra segurado. Toque = solto antes de BTN_HOLD_MS e sem
+     * outro botao junto: a acao vai ao jogo ao soltar, por BTN_PULSE_MS (o jogo le os controles a 20 Hz). Segurado =
+     * BTN_HOLD_MS ou mais: a acao vale enquanto o botao estiver apertado. E o tempo do SELECT do port do Fallout (toque =
+     * Esc, segurado = modificador). Com a mesma acao nos dois, o botao vale na hora, como um botao comum (sem espera).
+     * Um botao usado numa combinacao (com o MENU, ou o SELECT com outro botao) nao faz nada sozinho.
+     * O pulo (acao 3) so pula durante o jogo (o jogo avisa em port_jump_mode, a cada quadro, quando Link pode agir:
+     * fora do menu de pausa e sem caixa de texto); nos menus, textos e telas fora do jogo ele e o B do N64 (cancelar,
+     * passar texto). Os atalhos com SELECT segurado sao fixos (mais abaixo). */
     {
-        /* o botao de pulo apertado como B (texto, menu, cena) continua B ate ser solto: segurar B passa varias falas
-         * seguidas sem parar no intervalo entre uma caixa e outra (quando o jogo volta a liberar o pulo por um quadro) */
-        static int asB;
-        if (!held[jumpKey]) {
-            asB = 0;
-        } else if (!inPlay) {
-            asB = 1;
+        const long long now = mono_ms();
+        unsigned act = 0; /* (1 << ACT_*): as acoes ativas agora */
+        int i, inPlay;
+        port_input_frames++;
+        port_opt_manual_jump = 0;
+        for (i = 0; i < NBTN; i++) {
+            const int k = k_btnKey[i];
+            const int t = btn_act(port_opt_btn[2 * i]), h = btn_act(port_opt_btn[2 * i + 1]);
+            BtnState* s = &g_btn[i];
+            /* SELECT segurado: Y (captura), L1 (minimapa), R1 (medicao) e A (pulo da lua, com o cheat) sao atalhos */
+            const int selCombo = k != K_SELECT && held[K_SELECT] &&
+                                 (k == K_Y || k == K_L1 || k == K_R1 || (k == K_A && port_opt_cheat_moon_jump_on_l));
+            if (t == ACT_JUMP || h == ACT_JUMP) {
+                port_opt_manual_jump = 1; /* (z_player.c: com um botao de pulo, o pulo automatico e opcional) */
+            }
+            if (held[k] && !s->was) {
+                s->t0 = now;
+                s->combo = 0;
+                s->holding = 0;
+            }
+            if (held[k]) {
+                if (menu_down || selCombo) {
+                    s->combo = 1;
+                }
+                if (k == K_SELECT) {
+                    int j;
+                    for (j = 0; j < K_COUNT; j++) {
+                        if (j != K_SELECT && j != K_MENU && held[j]) {
+                            s->combo = 1; /* SELECT com outro botao: atalho, nao toque */
+                        }
+                    }
+                }
+                if (t == h) {
+                    if (!selCombo && !(k == K_SELECT && s->combo)) {
+                        act |= 1u << t;
+                    }
+                } else {
+                    if (!s->combo && now - s->t0 >= BTN_HOLD_MS) {
+                        s->holding = 1;
+                    }
+                    if (s->holding && !selCombo) {
+                        act |= 1u << h;
+                    }
+                }
+            } else if (s->was && t != h && !s->combo && !s->holding && now - s->t0 < BTN_HOLD_MS) {
+                s->pulseAct = t; /* toque */
+                s->pulseUntil = now + BTN_PULSE_MS;
+            }
+            s->was = held[k];
+            if (now < s->pulseUntil) {
+                act |= 1u << s->pulseAct;
+            }
         }
-        if (asB) {
-            inPlay = 0;
+        inPlay = port_jump_mode && (port_input_frames - port_jump_stamp) <= 12; /* (leituras a 60 Hz, jogo a 20) */
+        {
+            /* o pulo apertado como B (texto, menu, cena) continua B ate ser solto: segurar passa varias falas seguidas
+             * sem parar no intervalo entre uma caixa e outra (quando o jogo volta a liberar o pulo por um quadro) */
+            static int asB;
+            if (!(act & (1u << ACT_JUMP))) {
+                asB = 0;
+            } else if (!inPlay) {
+                asB = 1;
+            }
+            if (asB) {
+                inPlay = 0;
+            }
         }
-    }
-    port_input_jump = jumpOn && inPlay && held[jumpKey];
-    if (held[K_A]) b |= PORT_BTN_A;
-    if (jumpOn) {
-        if ((held[swordKey] && !(swordKey == K_Y && held[K_SELECT])) || (held[jumpKey] && !inPlay)) b |= PORT_BTN_B;
-    } else if (held[K_B]) {
-        b |= PORT_BTN_B;
+        port_input_jump = (act & (1u << ACT_JUMP)) && inPlay;
+        if ((act & (1u << ACT_JUMP)) && !inPlay) b |= PORT_BTN_B;
+        if (act & (1u << ACT_A)) b |= PORT_BTN_A;
+        if (act & (1u << ACT_B)) b |= PORT_BTN_B;
+        if (act & (1u << ACT_Z)) b |= PORT_BTN_Z;
+        if (act & (1u << ACT_R)) b |= PORT_BTN_R;
+        if (act & (1u << ACT_L)) b |= PORT_BTN_L;
+        if (act & (1u << ACT_START)) b |= PORT_BTN_START;
+        if (act & (1u << ACT_CUP)) b |= PORT_BTN_CUP;
+        if (act & (1u << ACT_CDOWN)) b |= PORT_BTN_CDOWN;
+        if (act & (1u << ACT_CLEFT)) b |= PORT_BTN_CLEFT;
+        if (act & (1u << ACT_CRIGHT)) b |= PORT_BTN_CRIGHT;
+        port_input_slow = (act & (1u << ACT_SLOW)) != 0; /* andar devagar (o direcional, logo abaixo) */
     }
     {
         /* segurar B nas falas (opcao hold_b_fast_text): depois de meio segundo segurando, com uma caixa de texto
          * aberta (que nao seja de escolha), o B vira toques seguidos (solto 1 leitura a cada 3). Assim toda parte do
          * jogo que espera um toque novo (fim da mensagem, cenas, atores) passa sozinha, como tocar B rapido. */
         static int bHeldReads;
-        int bKey = jumpOn ? jumpKey : K_B;
-        if (held[bKey] && (b & PORT_BTN_B) && port_opt_segurar_b && port_text_open && !port_text_choice &&
+        if ((b & PORT_BTN_B) && port_opt_segurar_b && port_text_open && !port_text_choice &&
             (port_input_frames - port_jump_stamp) <= 12) {
             bHeldReads++;
             if (bHeldReads > 10 && (bHeldReads % 3) == 0) {
                 b &= ~PORT_BTN_B;
             }
-        } else if (!held[bKey]) {
+        } else if (!(b & PORT_BTN_B)) {
             bHeldReads = 0;
         }
     }
@@ -322,61 +397,19 @@ static void read_pads(OSContPad pads[4]) {
         }
         cap_was = cap;
     }
-    if (held[cleftKey] && !(cleftKey == K_Y && held[K_SELECT])) b |= PORT_BTN_CLEFT;
-    if (held[cdownKey]) b |= PORT_BTN_CDOWN;
-    if (!jumpOn && held[K_L2]) b |= PORT_BTN_CUP;
-    {
-        /* R2 (C-direita) com a opcao slow_walk: um toque continua sendo o C-direita (o item do botao: estilingue...),
-         * enviado ao soltar por 120 ms; segurado mais de 200 ms, nao vira botao nenhum e o Link anda devagar (o
-         * direcional passa a forca de um analogico pouco inclinado, logo abaixo). MENU+R2 (estado rapido) nao conta. */
-        static long long r2_t0, cr_until;
-        static int r2_was, r2_menu;
-        struct timespec ts;
-        long long now;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        now = (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-        port_input_slow = 0;
-        if (!port_opt_slow_walk) {
-            if (held[K_R2]) b |= PORT_BTN_CRIGHT;
-        } else {
-            if (held[K_R2] && !r2_was) {
-                r2_t0 = now;
-                r2_menu = menu_down;
-            }
-            if (held[K_R2]) {
-                r2_menu |= menu_down;
-                if (now - r2_t0 >= 200) {
-                    port_input_slow = 1;
-                }
-            } else if (r2_was && !r2_menu && now - r2_t0 < 200) {
-                cr_until = now + 120; /* toque: o C-direita de sempre */
-            }
-            r2_was = held[K_R2];
-            if (now < cr_until) b |= PORT_BTN_CRIGHT;
-        }
-    }
-    if (held[K_L1]) b |= PORT_BTN_Z;
-    if (held[K_R1]) b |= PORT_BTN_R;
-    if (held[K_START]) b |= PORT_BTN_START;
 
     dx = (held[K_RIGHT] ? 1 : 0) - (held[K_LEFT] ? 1 : 0);
     dy = (held[K_UP] ? 1 : 0) - (held[K_DOWN] ? 1 : 0);
     {
-        /* SELECT segurado: o direcional vira o D-pad do N64 (e Link fica parado). SELECT sozinho
-         * (apertar e soltar sem outra tecla) vira um toque no L, que dura 120 ms para o jogo ver. */
-        static int sel_was, sel_used;
-        static long long l_until, cup_until;
-        struct timespec ts;
-        long long now;
+        /* atalhos fixos com SELECT segurado: o direcional vira o D-pad do N64 (e Link fica parado), cima/baixo mudam o
+         * brilho, L1 liga/desliga o minimapa (um toque no L, que dura 120 ms para o jogo ver), R1 grava a medicao */
+        static long long l_until;
+        const long long now = mono_ms();
         int sel = held[K_SELECT];
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        now = (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-        if (sel && !sel_was) {
-            sel_used = 0;
-        }
         if (sel) {
             static int down_was;
             static int up_was;
+            static int l1_was;
             if (held[K_UP]) b |= PORT_BTN_DUP;
             if (held[K_UP] && !up_was) { /* SELECT+cima: brilho (gamma) +1, ate 10; fica gravado no options.txt */
                 if (gx_brilho < 10) {
@@ -392,21 +425,12 @@ static void read_pads(OSContPad pads[4]) {
                 }
             }
             down_was = held[K_DOWN];
-            if (jumpOn) {
-                static int l1_was;
-                if (held[K_L1] && !l1_was) {
-                    l_until = now + 120; /* SELECT+L1: minimapa (L) */
-                }
-                l1_was = held[K_L1];
-                b &= ~PORT_BTN_Z; /* (o L1 com SELECT nao mira) */
-            } else if (held[K_DOWN]) {
-                b |= PORT_BTN_DDOWN;
+            if (held[K_L1] && !l1_was) {
+                l_until = now + 120; /* SELECT+L1: minimapa (L) */
             }
+            l1_was = held[K_L1];
             if (held[K_LEFT]) b |= PORT_BTN_DLEFT;
             if (held[K_RIGHT]) b |= PORT_BTN_DRIGHT;
-            if (dx || dy || held[K_Y] || held[K_A] || held[K_B] || held[K_X] || held[K_L1]) {
-                sel_used = 1;
-            }
             {
                 /* SELECT+R1: grava a medicao detalhada dos nucleos (opcao perf_trace) */
                 static int r1_was;
@@ -418,26 +442,11 @@ static void read_pads(OSContPad pads[4]) {
                     }
                 }
                 r1_was = held[K_R1];
-                if (held[K_R1]) {
-                    sel_used = 1;
-                    b &= ~PORT_BTN_R; /* (o R1 com SELECT nao levanta o escudo) */
-                }
-            }
-            if (held[K_A] && port_opt_cheat_moon_jump_on_l) {
-                b &= ~PORT_BTN_A; /* SELECT+A: pulo da lua (cheat), o A nao chega ao jogo */
             }
             dx = dy = 0;
-        } else if (sel_was && !sel_used) {
-            if (jumpOn) {
-                cup_until = now + 120; /* toque no SELECT: C-cima (com o pulo manual) */
-            } else {
-                l_until = now + 120;
-            }
         }
-        sel_was = sel;
         port_input_select_a = sel && held[K_A];
         if (now < l_until) b |= PORT_BTN_L;
-        if (now < cup_until) b |= PORT_BTN_CUP;
     }
     {
         /* ocarina na mao (o som da ocarina ligado, src/audio/game/general.c): o direcional toca as notas dos botoes C

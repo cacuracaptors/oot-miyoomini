@@ -39,10 +39,7 @@ from your European ROM.
 - Smooth D-pad turning (Link turns in smooth curves, like with an analog stick)
 - Natural aiming (up looks up) and smooth aiming, for first person, the slingshot, the bow and the hookshot
 - Mid-air steering: the D-pad nudges Link's direction while jumping or falling (up to 45 degrees, not a full turn)
-- Slow walk: hold R2 to walk slowly (a quick tap on R2 is still C-Right)
-- Optional ledge grab: turn it off and Link falls off ledges instead of hanging from them
 - Sprint: keep holding A after a roll
-- Improved roll
 - Ocarina on the D-pad (C buttons) and the shoulder buttons (Z and R bend the note)
 - Select+Left/Right switches tunics and boots without opening the pause menu
 
@@ -52,9 +49,7 @@ from your European ROM.
   Zelda 64 BR fan translation by Hyllian, Odin, Fserve and Solid_One, with translated graphics)
 - German and French, taken from your own European ROM: put it in the game folder (zipped or not) and the game
   extracts them once - all the text, the item and place names, the area and boss title cards and the pause menu
-- Italian (the Zelda 64 ITA fan translation by XXcentury, v1.00 from 2001, accents restored; translated graphics
-  from Patcher64+)
-- The in-game options menu follows the chosen language (all six)
+- The in-game options menu follows the chosen language (all five)
 
 ### In-game options menu (Menu+Start)
 
@@ -151,8 +146,9 @@ When you update the port to a new version, just replace the files: the game data
 | Menu+R2 / Menu+L2 | Save / load the quick state |
 | Menu | Game Switcher / back to OnionOS / previous game, as set in OnionOS Tweaks (the state is saved first) |
 
-With the manual jump turned off (Menu+Start > Controls), the buttons are the original ones: B is the sword,
-Y C-Left, X C-Down, R2 C-Right, L2 C-Up. With "Jump on B" off, X jumps and B is the sword.
+Every button except Menu can be changed in Menu+Start > Controls, with one action for a quick tap and another
+for holding it (half a second or more). A button with the same action for both works at once, like a normal
+button. "Default buttons" brings back the layout above. The Select+button shortcuts don't change.
 ### Playing the ocarina
 
 While the ocarina is out, the buttons change so that every note is easy to reach:
@@ -201,8 +197,6 @@ This port cross-compiles for ARMv7 hard-float on Windows + WSL2, with the
   cheats follow its code)
 - Zelda 64 BR (Brazilian Portuguese translation, v1.8) by Hyllian, Odin, Fserve and Solid_One, with graphics from
   Patcher64+
-- Zelda 64 ITA (Italian translation, v1.00, 2001) by XXcentury, with Rulesless and Brisma; graphics from
-  Patcher64+ (GhostlyDark) - https://github.com/Admentus64/Patcher64Plus-Tool
 - Audio microcode in C based on mupen64plus's HLE
 - Miyoo Mini toolchain by Shaun Inman - https://github.com/shauninman/union-miyoomini-toolchain
 - Options menu font: DejaVu Sans - https://dejavu-fonts.github.io
@@ -217,5 +211,4 @@ of the game.
 
 ## AI-Assisted
 
-Claude Opus 5.5 was used to write most part of the code and to speed up debugging and optimization.
-Even though I'm no software engineer, I have a background in the modding community, so I understand how basic rendering tricks work. I don't write complex code myself (that's why I use Claude) but I understand how it's logic works and what's going on most of the time, so I can control what Claude is doing more tightly.
+Claude Opus 5.5 was used to write parts of the code and to speed up debugging and optimization.
