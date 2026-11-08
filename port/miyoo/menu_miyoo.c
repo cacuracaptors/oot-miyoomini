@@ -552,7 +552,14 @@ int miyoo_menu_active(void) {
 static int g_anim;      /* (desenho) algo se mexe na tela: redesenha sempre */
 static double g_selAt; /* (desenho) quando a escolha mudou */
 
+/* hora de redesenhar sem mudanca nenhuma (o cartao da descricao comecar a crescer); 0 = nenhuma */
+static double g_wakeAt;
+
 int miyoo_menu_dirty(void) {
+    if (g_wakeAt > 0.0 && miyoo_now_ms() >= g_wakeAt) {
+        g_wakeAt = 0.0;
+        return 1;
+    }
     return g_dirty || g_anim;
 }
 
@@ -1538,14 +1545,24 @@ static int draw_value(const Item* it, int y, int isSel) {
  * era dificil de ler); qualquer botao volta ao tamanho normal (miyoo_menu_key renova g_selAt) */
 #define HELP_GROW_MS 1000.0
 #define HELP_GROW_ANIM_MS 320.0
+/* desenho parcial enquanto o cartao cresce: o resto da tela nao muda, entao a imagem inteira de antes (g_base) e
+ * copiada e so o cartao e desenhado de novo (redesenhar o menu todo, com o fundo translucido e as letras suavizadas,
+ * pesava: a animacao saia aos trancos) */
+static int g_helpState; /* (do ultimo desenho) 0 cabe no cartao, 1 esperando para crescer, 2 crescendo, 3 crescido */
+static char g_helpText[1024];
+static uint32_t* g_base;
+static int g_baseOk, g_baseTab, g_baseSel;
+static double g_baseAt;
 static void draw_help(const char* s) {
     static char lines[HELP_MAXL][256];
     const int n = help_split(s, W - 64, lines);
     int i, shown = n < HELP_LINES ? n : HELP_LINES, y0 = HELP_Y;
     if (n > HELP_LINES) {
         const double t = miyoo_now_ms() - g_selAt;
+        g_helpState = 3;
         if (t < HELP_GROW_MS) {
-            g_anim = 1; /* (redesenha ate a hora de crescer) */
+            g_helpState = 1;
+            g_wakeAt = g_selAt + HELP_GROW_MS; /* (so redesenha na hora de crescer) */
             chevron(W - 28, HELP_Y + HELP_H - 14, 6, 3, TH(accent));
         } else {
             /* cresce para cima (animado), o fundo do cartao no mesmo lugar */
@@ -1560,6 +1577,7 @@ static void draw_help(const char* s) {
             if (k < 1.0f) {
                 const float e = 1.0f - (1.0f - k) * (1.0f - k) * (1.0f - k); /* (sai rapido e freia no fim) */
                 g_anim = 1;
+                g_helpState = 2;
                 h = HELP_H + (int)((float)(full - HELP_H) * e + 0.5f);
             }
             y0 = HELP_Y + HELP_H - h;
@@ -1604,8 +1622,19 @@ static void draw_footer(void) {
 void miyoo_menu_render(uint32_t* page) {
     int first, n, i, *sel, *top;
     char buf[64];
+    if (!g_dirty && g_baseOk && g_baseTab == g_tab && g_baseSel == g_sel[g_tab] && g_baseAt == g_selAt && !g_confirm &&
+        (g_helpState == 1 || g_helpState == 2)) {
+        /* so o cartao da descricao mudou (crescendo): a imagem de antes e o cartao por cima */
+        g_anim = 0;
+        g_page = page;
+        memcpy(page, g_base, (size_t)W * H * 4);
+        draw_help(g_helpText);
+        return;
+    }
     g_dirty = 0;
     g_anim = 0;
+    g_helpState = 0;
+    g_wakeAt = 0.0;
     g_page = page;
     g_th = &k_themes[port_opt_menu_theme == 1 ? 1 : 0];
     n = tab_count(g_tab, &first);
@@ -1758,6 +1787,21 @@ void miyoo_menu_render(uint32_t* page) {
             h = toggle_help(h, tmp, sizeof tmp);
         }
         draw_help(h);
+        if (g_helpState == 1) {
+            /* vai crescer: guarda a imagem (o cartao crescido cobre o cartao pequeno) para o desenho parcial */
+            snprintf(g_helpText, sizeof g_helpText, "%s", h);
+            if (g_base == NULL) {
+                g_base = (uint32_t*)malloc((size_t)W * H * 4);
+            }
+            g_baseOk = 0;
+        }
     }
     draw_footer();
+    if (g_helpState == 1 && g_base != NULL) {
+        memcpy(g_base, page, (size_t)W * H * 4);
+        g_baseOk = 1;
+        g_baseTab = g_tab;
+        g_baseSel = *sel;
+        g_baseAt = g_selAt;
+    }
 }
