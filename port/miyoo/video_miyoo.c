@@ -943,61 +943,126 @@ out:
     return ok;
 }
 
-/* monta a camada (orientacao de quem olha: a linha 2j e a do jogo, a 2j+1 a escura) */
+/* A camada inteira (640x480: 1,2 MB; 752x560: 1,7 MB) e pedida quando o filtro liga. Ligado no meio do jogo, a memoria do
+ * chip 2D ja pode estar tomada pelas imagens (na tela de 752x560 elas sao maiores): "filtro retro sem memoria" e o filtro
+ * nao aparecia ate reabrir o jogo (relato do Mini Flip, 11/2026). Reserva: uma faixa de RT_STRIP linhas (o desenho se
+ * repete a cada 2 linhas e 3 colunas), pedida na abertura e passada varias vezes, ja na orientacao da pagina (sem giro). */
+#define RT_STRIP 80
+static MI_PHY rs_phys;
+static uint32_t* rs_virt;
+static int rt_strip; /* 1 = a camada e a faixa */
+
+static void rt_reserve(void) {
+    void* v = NULL;
+    const MI_U32 bytes = (MI_U32)(PANEL_W * RT_STRIP * 4);
+    if (PANEL_H % RT_STRIP != 0 || mi.MmaAlloc(NULL, bytes, &rs_phys) != 0) {
+        rs_phys = 0;
+        return;
+    }
+    if (mi.Mmap(rs_phys, bytes, &v, TRUE) != 0) {
+        mi.MmaFree(rs_phys);
+        rs_phys = 0;
+        return;
+    }
+    rs_virt = (uint32_t*)v;
+}
+
+/* um ponto da camada; x, y na orientacao de quem olha (a linha 2j e a do jogo, a 2j+1 a escura) */
+static uint32_t rt_px(int mode, int x, int y, unsigned line, unsigned mk) {
+    const unsigned l = (y & 1) ? line : 255u;
+    unsigned c[3] = { l, l, l };
+    if (mode == 2) {
+        int k;
+        for (k = 0; k < 3; k++) {
+            if (k != x % 3) {
+                c[k] = c[k] * mk / 255u;
+            }
+        }
+    }
+    if (rt_mul == 1) {
+        return 0xFF000000u | (c[0] << 16) | (c[1] << 8) | c[2];
+    }
+    /* so a transparencia: preto (ja multiplicado pelo alfa) que tira a parte que falta do brilho */
+    return (uint32_t)(255u - (c[0] + c[1] + c[2]) / 3u) << 24;
+}
+
 static int rt_build(int mode, int forca) {
     const size_t n = (size_t)PANEL_W * PANEL_H;
     int x, y;
     unsigned line, mk;
-    if (rt_virt == NULL) {
+    if (rt_virt == NULL && !rt_strip && rs_virt != NULL && getenv("OOT_FILTRO_FAIXA") != NULL) {
+        rt_strip = 1; /* (teste: a faixa mesmo com memoria para a camada inteira) */
+        fprintf(stderr, "video: filtro retro em faixas de %d linhas (OOT_FILTRO_FAIXA)\n", RT_STRIP);
+    }
+    if (rt_virt == NULL && !rt_strip) {
         void* v = NULL;
-        if (mi.MmaAlloc(NULL, (MI_U32)(n * 4), &rt_phys) != 0) {
+        if (mi.MmaAlloc(NULL, (MI_U32)(n * 4), &rt_phys) == 0 && mi.Mmap(rt_phys, (MI_U32)(n * 4), &v, TRUE) == 0) {
+            rt_virt = (uint32_t*)v;
+        } else {
+            if (rt_phys) {
+                mi.MmaFree(rt_phys);
+            }
             rt_phys = 0;
-            return 0;
+            if (rs_virt == NULL) {
+                return 0;
+            }
+            rt_strip = 1;
+            fprintf(stderr, "video: filtro retro em faixas de %d linhas (sem memoria para a camada inteira)\n", RT_STRIP);
         }
-        if (mi.Mmap(rt_phys, (MI_U32)(n * 4), &v, TRUE) != 0) {
-            mi.MmaFree(rt_phys);
-            rt_phys = 0;
-            return 0;
-        }
-        rt_virt = (uint32_t*)v;
     }
     forca = forca < 10 ? 10 : forca > 90 ? 90 : forca;
     line = 255u - 255u * (unsigned)forca / 100u;      /* linha escura */
     mk = 255u - 255u * (unsigned)forca / 200u;        /* mascara: os 2 canais que nao sao o da coluna */
-    for (y = 0; y < PANEL_H; y++) {
-        uint32_t* row = rt_virt + (size_t)y * PANEL_W;
-        const unsigned l = (y & 1) ? line : 255u;
-        for (x = 0; x < PANEL_W; x++) {
-            unsigned c[3] = { l, l, l };
-            uint32_t px;
-            if (mode == 2) {
-                int k;
-                for (k = 0; k < 3; k++) {
-                    if (k != x % 3) {
-                        c[k] = c[k] * mk / 255u;
-                    }
-                }
+    if (rt_strip) {
+        /* linha r e coluna c da pagina = linha PANEL_H-1-r e coluna PANEL_W-1-c de quem olha (a pagina e girada 180; com
+         * RT_STRIP par, cada faixa da pagina tem as mesmas linhas pares e impares) */
+        for (y = 0; y < RT_STRIP; y++) {
+            uint32_t* row = rs_virt + (size_t)y * PANEL_W;
+            for (x = 0; x < PANEL_W; x++) {
+                row[x] = rt_px(mode, PANEL_W - 1 - x, PANEL_H - 1 - y, line, mk);
             }
-            if (rt_mul == 1) {
-                px = 0xFF000000u | (c[0] << 16) | (c[1] << 8) | c[2];
-            } else {
-                /* so a transparencia: preto (ja multiplicado pelo alfa) que tira a parte que falta do brilho */
-                const unsigned lum = (c[0] + c[1] + c[2]) / 3u;
-                px = (uint32_t)(255u - lum) << 24;
-            }
-            row[x] = px;
         }
+        mi.Flush(rs_virt, (MI_U32)(PANEL_W * RT_STRIP * 4));
+    } else {
+        for (y = 0; y < PANEL_H; y++) {
+            uint32_t* row = rt_virt + (size_t)y * PANEL_W;
+            for (x = 0; x < PANEL_W; x++) {
+                row[x] = rt_px(mode, x, y, line, mk);
+            }
+        }
+        mi.Flush(rt_virt, (MI_U32)(n * 4));
     }
-    mi.Flush(rt_virt, (MI_U32)(n * 4));
     fprintf(stderr, "video: filtro retro %s, forca %d%% (%s)\n", mode == 2 ? "linhas e mascara" : "linhas", forca,
             rt_mul == 1 ? "multiplicando as cores" : "so escurecendo");
     return 1;
 }
 
+/* a faixa por cima das linhas dy..dy+RT_STRIP-1 da pagina */
+static int rt_blit_strip(MI_PHY dst, int dy, int sop, int dop, MI_U16* fence) {
+    MI_GFX_Surface_t s = { rs_phys, E_MI_GFX_FMT_ARGB8888, (MI_U32)PANEL_W, (MI_U32)RT_STRIP, (MI_U32)PANEL_W * 4 };
+    MI_GFX_Surface_t d = { dst, E_MI_GFX_FMT_ARGB8888, (MI_U32)PANEL_W, (MI_U32)PANEL_H, (MI_U32)PANEL_W * 4 };
+    MI_GFX_Rect_t sr = { 0, 0, (MI_U32)PANEL_W, (MI_U32)RT_STRIP }, dr = { 0, dy, (MI_U32)PANEL_W, (MI_U32)RT_STRIP };
+    MI_GFX_Opt_t opt;
+    int e;
+    memset(&opt, 0, sizeof opt);
+    opt.stClipRect = dr;
+    opt.eSrcDfbBldOp = (MI_GFX_DfbBldOp_e)sop;
+    opt.eDstDfbBldOp = (MI_GFX_DfbBldOp_e)dop;
+    opt.eMirror = E_MI_GFX_MIRROR_NONE;
+    opt.eRotate = E_MI_GFX_ROTATE_0;
+    opt.eDFBBlendFlag = E_MI_GFX_DFB_BLEND_ALPHACHANNEL;
+    pthread_mutex_lock(&g_blitMx);
+    e = mi.Blit(&s, &sr, &d, &dr, &opt, fence) != 0;
+    pthread_mutex_unlock(&g_blitMx);
+    return e;
+}
+
 static void rt_draw(int back) {
     extern int gx_retro, gx_retro_forca; /* gfx_hires.c */
     const int mode = gx_retro;
+    const MI_PHY page = (MI_PHY)fb_phys + (MI_PHY)back * PANEL_W * PANEL_H * 4;
     MI_U16 fence = 0;
+    int sop, dop;
     if (mode <= 0 || !hw_ok || rt_mul == -2) {
         return;
     }
@@ -1013,9 +1078,19 @@ static void rt_draw(int back) {
         rt_mode = mode;
         rt_forca = gx_retro_forca;
     }
-    if (rt_blit(rt_phys, (MI_PHY)fb_phys + (MI_PHY)back * PANEL_W * PANEL_H * 4, PANEL_W, PANEL_H,
-                rt_mul == 1 ? rt_sop : E_MI_GFX_DFB_BLD_ONE, rt_mul == 1 ? rt_dop : E_MI_GFX_DFB_BLD_INVSRCALPHA,
-                hw_rotate, hw_mirror, &fence) == 0) {
+    sop = rt_mul == 1 ? rt_sop : E_MI_GFX_DFB_BLD_ONE;
+    dop = rt_mul == 1 ? rt_dop : E_MI_GFX_DFB_BLD_INVSRCALPHA;
+    if (rt_strip) {
+        int y, sent = 0;
+        for (y = 0; y < PANEL_H; y += RT_STRIP) {
+            sent += rt_blit_strip(page, y, sop, dop, &fence) == 0;
+        }
+        if (sent) {
+            mi.Wait(TRUE, fence);
+        }
+        return;
+    }
+    if (rt_blit(rt_phys, page, PANEL_W, PANEL_H, sop, dop, hw_rotate, hw_mirror, &fence) == 0) {
         mi.Wait(TRUE, fence);
     }
 }
@@ -1088,6 +1163,7 @@ static int hw_init(void) {
             gx_ge_bg = ge_bg_blit;        /* (fundos JPEG pelo chip 2D, gfx_rdp.c) */
         }
     }
+    rt_reserve(); /* (a faixa do filtro retro, antes do resto pegar a memoria do chip 2D) */
     if (hw_rotate == E_MI_GFX_ROTATE_180 && hw_mirror == E_MI_GFX_MIRROR_NONE) {
         ge_init();
     } else {
@@ -1371,8 +1447,35 @@ static void battery_draw(uint32_t* page) {
 }
 
 /* a pagina na tela agora (imagem do Game Switcher, port/savestate.c): 640x480, girada 180 graus */
-/* a tela de 752x560 vai reduzida para 640x480 (o tamanho que o Game Switcher sempre recebeu do jogo) */
-static void page_to_menu(const uint32_t* src, uint32_t* dst);
+/* a tela de 752x560 vai reduzida para 640x480 (o tamanho que o Game Switcher recebeu do jogo nas versoes anteriores, que
+ * ele mostra certo). Pelo vizinho mais proximo, as linhas do filtro retro ficavam embaralhadas na imagem (relato do Mini
+ * Flip, 11/2026); nem a media de area resolve (cada ponto cobre 1,17 linha: sobram faixas). Cada ponto e a media de 2
+ * linhas vizinhas (uma do jogo e uma escura: o padrao das linhas some por igual) e 3 colunas (o da mascara de cor) */
+static void page_to_small(const uint32_t* src, uint32_t* dst) {
+    static uint16_t xs[MENU_W];
+    int x, y, c;
+    for (x = 0; x < MENU_W; x++) {
+        int cx = ((2 * x + 1) * PANEL_W) / (2 * MENU_W) - 1;
+        xs[x] = (uint16_t)(cx < 0 ? 0 : cx > PANEL_W - 3 ? PANEL_W - 3 : cx);
+    }
+    for (y = 0; y < MENU_H; y++) {
+        int cy = ((2 * y + 1) * PANEL_H) / (2 * MENU_H);
+        const uint32_t *r0, *r1;
+        cy = cy < 1 ? 1 : cy > PANEL_H - 1 ? PANEL_H - 1 : cy;
+        r0 = src + (size_t)(cy - 1) * PANEL_W;
+        r1 = src + (size_t)cy * PANEL_W;
+        for (x = 0; x < MENU_W; x++) {
+            uint32_t o = 0;
+            const int x0 = xs[x];
+            for (c = 0; c < 24; c += 8) {
+                const unsigned v = ((r0[x0] >> c) & 255u) + ((r0[x0 + 1] >> c) & 255u) + ((r0[x0 + 2] >> c) & 255u) +
+                                   ((r1[x0] >> c) & 255u) + ((r1[x0 + 1] >> c) & 255u) + ((r1[x0 + 2] >> c) & 255u);
+                o |= (uint32_t)((v + 3u) / 6u) << c;
+            }
+            dst[(size_t)y * MENU_W + x] = o;
+        }
+    }
+}
 
 int miyoo_video_front(const uint32_t** page) {
     static uint32_t* small;
@@ -1386,7 +1489,7 @@ int miyoo_video_front(const uint32_t** page) {
     if (small == NULL && (small = (uint32_t*)malloc((size_t)MENU_W * MENU_H * 4)) == NULL) {
         return 0;
     }
-    page_to_menu(fb_page_ptr(fb_page), small);
+    page_to_small(fb_page_ptr(fb_page), small);
     *page = small;
     return 1;
 }
@@ -2073,6 +2176,15 @@ static void release_mma(void) {
         rt_phys = 0;
         rt_mode = -1;
         kb += (PANEL_W * PANEL_H * 4) >> 10;
+        n++;
+    }
+    if (rs_virt != NULL) {
+        mi.Munmap(rs_virt, (MI_U32)(PANEL_W * RT_STRIP * 4));
+        mi.MmaFree(rs_phys);
+        rs_virt = NULL;
+        rs_phys = 0;
+        rt_strip = 0;
+        kb += (PANEL_W * RT_STRIP * 4) >> 10;
         n++;
     }
     if (g_mwVirt != NULL) {

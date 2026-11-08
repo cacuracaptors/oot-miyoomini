@@ -813,8 +813,8 @@ void gx_hr_menu_mark(int open) {
 void gx_hr_sync_opts(void) {
     extern int gx_texto_320, gx_texto_320_opt; /* gfx_ge.c */
     if (gx_hr_pan560) {
-        /* tela de 752x560: a opcao no maximo (640) vale o tamanho da tela; o filtro retro fica em 376x280 */
-        gx_hr_max = gx_retro ? RETRO560_W : gx_hr_max_opt >= 640 ? 752 : gx_hr_max_opt;
+        /* tela de 752x560: a opcao vale proporcional (640 = 752, 480 = 564...); o filtro retro fica em 376x280 */
+        gx_hr_max = gx_retro ? RETRO560_W : gx_hr_max_opt <= FB_W ? FB_W : gx_hr_max_opt * 752 / 640; /* (proporcional) */
     } else {
         gx_hr_max = gx_retro ? FB_W : gx_hr_max_opt;
     }
