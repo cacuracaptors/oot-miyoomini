@@ -644,19 +644,16 @@ static GxTex *premix_get(const GxTex *A, const GxTex *B, int v, PremixGeo *pg) {
     const uint32_t shape = pg == NULL ? 0
                            : (uint32_t)(pg->sizeS << 24 ^ pg->sizeT << 16 ^ pg->raS << 12 ^ pg->raT << 8 ^ pg->rbS << 4 ^
                                         pg->rbT) | 1u;
+    (void)shape;
+    /* Lote 194: as misturas deslocadas guardam varias por par de texturas (uma por deslocamento; a mesma agua pode vir
+     * em pedacos com deslizamentos diferentes) e so valem com o deslocamento exato. O reaproveitamento nos quadros
+     * extras (lote 187) saiu: com a camera andando a agua dava pulinhos nos quadros extras. */
     for (i = 0; i < PREMIX_N; i++) {
-        if (g_pm[i].a == A && g_pm[i].b == B && g_pm[i].ka == A->key && g_pm[i].kb == B->key && g_pm[i].m != NULL) {
+        if (g_pm[i].a == A && g_pm[i].b == B && g_pm[i].ka == A->key && g_pm[i].kb == B->key && g_pm[i].m != NULL &&
+            (geo == 0 || g_pm[i].geo == geo)) {
             e = &g_pm[i];
             break;
         }
-    }
-    if (e != NULL && pg != NULL && gx_pass_extra && e->shape == shape && abs(e->v - v) < 3) {
-        /* quadro extra (intermediario): a mistura do ultimo quadro do jogo, com a tile dela - a textura que desliza fica
-         * onde estava no quadro do jogo (como sem a interpolacao das texturas que deslizam; nao se nota) e nao se
-         * refaz a mistura 1 vez em cada 3 desenhos */
-        pg->tile = e->tile;
-        e->used = ++g_pmClock;
-        return e->m;
     }
 #ifdef GX_REPLAY_DIAG
     if (e != NULL && geo != 0 && getenv("PMFORCE")) {
@@ -667,7 +664,7 @@ static GxTex *premix_get(const GxTex *A, const GxTex *B, int v, PremixGeo *pg) {
         e->used = ++g_pmClock;
         return e->m;
     }
-    if (e == NULL) {
+    if (e == NULL || (geo != 0 && e->geo != geo)) {
         e = &g_pm[0];
         for (i = 1; i < PREMIX_N; i++) {
             if (g_pm[i].used < e->used) {
@@ -3915,7 +3912,7 @@ int gx_bgmix = 1; /* 1 = camadas misturadas do fundo tambem adiadas */
  * mesmo o que o chao e as casas cobririam depois (no lago e em Kakariko um objeto transparente logo depois do ceu
  * fechava a janela no comeco). Agora o fundo e desenhado so no retangulo que o transparente cobre (JOB_BGPART, onde
  * nada escreveu ainda), esse retangulo fica marcado, e a janela continua aberta. Mesma imagem. */
-int gx_bgpart = 1;
+int gx_bgpart = 0; /* (desligado ate a imagem ficar certa no aparelho: so o reprodutor liga, --fundo-parcial) */
 static int g_bgState, g_bgFirst, g_bgLast, g_bgY0, g_bgY1;
 static const uint8_t *g_bgCimg;
 #define BGP_MEMO 4
@@ -3964,6 +3961,22 @@ static void bg_part(int xs, int xe, int ys, int ye) {
             return; /* (ja preenchido: o fundo ali ja esta desenhado e marcado) */
         }
     }
+#ifdef GX_REPLAY_DIAG
+    {
+        static int lim = -2;
+        if (lim == -2) {
+            lim = getenv("BGPMAX") ? atoi(getenv("BGPMAX")) : -1;
+        }
+        if (lim >= 0 && g_bgpN >= lim) {
+            bg_end(); /* (diagnostico: so as primeiras BGPMAX) */
+            return;
+        }
+        if (getenv("BGDBG")) {
+            fprintf(stderr, "[fundo] parcial %d: trabalho %d tex %08x omL %08x comb %08x %08x | x %d..%d y %d..%d | estado %d\n",
+                    g_bgpN + 1, g_nJobs, gx.timgRaw, gx.omL, gx.combW0, gx.combW1, xs, xe, ys, ye, g_bgState);
+        }
+    }
+#endif
     run_close();
     g_ord[g_nJobs] = (uint16_t)g_nJobs;
     j = &g_jobs[g_nJobs++]; /* batch_reserve deixou lugar (o mesmo do JOB_BGEND: a janela continua aberta) */
@@ -3976,6 +3989,7 @@ static void bg_part(int xs, int xe, int ys, int ye) {
     j->y1 = ye;
     j->lys = xs; /* (colunas: lys/lye nao sao usados fora do JOBF_LAZY) */
     j->lye = xe;
+    j->fill = (uint32_t)(g_bgpN + 1); /* (numero do retangulo nesta janela: diagnostico) */
     k = g_bgpN++ % BGP_MEMO;
     g_bgpR[k][0] = xs;
     g_bgpR[k][1] = xe;
@@ -4427,9 +4441,15 @@ static void run_bgpart(FastCtx *ctx, int band, int nb, const GxJob *e) {
     int i, y;
     const uint8_t *own = ctx->own ? ctx->own : g_own;
     const int cx0 = e->lys, cx1 = e->lye;
+    uint8_t need[COV_H]; /* linhas do retangulo com algum pixel ainda livre (as cobertas inteiras ficam de fora) */
+    int any = 0;
+    for (y = e->y0; y <= e->y1; y++) {
+        need[y] = row_mine_t(own, y, band, nb) && memchr(g_cov[y] + cx0, 0, (size_t)(cx1 - cx0 + 1)) != NULL;
+        any |= need[y];
+    }
     ctx->covR = 1;
     ctx->covW = 0;
-    for (i = e->x0; i <= e->x1; i++) {
+    for (i = any ? e->x0 : e->x1 + 1; i <= e->x1; i++) {
         const GxJob *t = &g_jobs[i];
         const FastProg *f;
         int ya, yb;
@@ -4446,7 +4466,7 @@ static void run_bgpart(FastCtx *ctx, int band, int nb, const GxJob *e) {
             yb = t->g.ye < e->y1 ? t->g.ye : e->y1;
             for (y = ya; y <= yb; y++) {
                 int xs, xe;
-                if (row_mine_t(own, y, band, nb) && tri_span(&t->g, y, &xs, &xe)) {
+                if (need[y] && tri_span(&t->g, y, &xs, &xe)) {
                     if (xs < cx0) xs = cx0;
                     if (xe > cx1) xe = cx1;
                     if (xs <= xe) {
@@ -4460,7 +4480,7 @@ static void run_bgpart(FastCtx *ctx, int band, int nb, const GxJob *e) {
             yb = t->y1 < e->y1 ? t->y1 : e->y1;
             if (xs <= xe) {
                 for (y = ya; y <= yb; y++) {
-                    if (row_mine_t(own, y, band, nb)) {
+                    if (need[y]) {
                         gx_span_fast(&t->P, f, ctx, y, xs, xe);
                     }
                 }
@@ -4473,6 +4493,22 @@ static void run_bgpart(FastCtx *ctx, int band, int nb, const GxJob *e) {
             memset(g_cov[y] + cx0, 1, (size_t)(cx1 - cx0 + 1));
         }
     }
+#ifdef GX_REPLAY_DIAG
+    if (getenv("BGCOVDUMP") && (uint32_t)atoi(getenv("BGCOVDUMP")) == e->fill) {
+        /* (diagnostico: a mascara logo depois deste retangulo; 255 = marcado) */
+        FILE *fp = fopen("cov.pgm", "wb");
+        if (fp != NULL) {
+            int x;
+            fprintf(fp, "P5 %d %d 255\n", 384, 288);
+            for (y = 0; y < 288; y++) {
+                for (x = 0; x < 384; x++) {
+                    fputc(g_cov[y][x] ? 255 : 0, fp);
+                }
+            }
+            fclose(fp);
+        }
+    }
+#endif
 }
 
 static void run_jobs(FastCtx *ctx, int band, int nb, int i0, int i1) {

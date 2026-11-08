@@ -19,26 +19,43 @@ cd /mnt/SDCARD/oot_zora || exit 1
 chmod +x ./rp
 echo performance > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
 R="--fast --threads 2 --pin --rt 1 --resolucao 384 --filtro-rapido --extras"
-for C in lento_00.cap lento_07.cap ../oot_kakariko/lento_08.cap ../oot_kakariko/lento_10.cap; do
-  [ -f $C ] || continue
+B="--fast --resolucao 384 --filtro-rapido --fundo-parcial"
+mkdir -p diag
+rm -f diag/*
+for C in ../oot_kakariko/lento_08.cap reg/captura_03.cap; do
+  b=$(basename $C .cap)
   echo "== $C"
-  BGDBG=1 ./rp $C --fast --threads 2 --resolucao 384 --filtro-rapido 2>&1 | grep "^\[fundo\] fecha" | head -4
-  for v in "novo:" "sem_parcial:--sem-fundo-parcial" "novo:" "sem_parcial:--sem-fundo-parcial"; do
+  # 1) o fundo adiado antigo esta certo? (sem a mudanca: com e sem o fundo adiado)
+  ./rp $C $B --threads 2 --sem-fundo-parcial --out diag/$b.antigo.png > /dev/null 2>&1
+  ./rp $C $B --threads 2 --sem-fundo --out diag/$b.sem_fundo.png > /dev/null 2>&1
+  if cmp -s diag/$b.antigo.png diag/$b.sem_fundo.png; then echo "fundo adiado antigo: igual a sem fundo adiado"; else echo "fundo adiado antigo: DIFERENTE de sem fundo adiado"; fi
+  # 2) com 1 e 2 threads
+  ./rp $C $B --threads 1 --out diag/$b.novo1.png > /dev/null 2>&1
+  ./rp $C $B --threads 2 --out diag/$b.novo2.png > /dev/null 2>&1
+  if cmp -s diag/$b.novo1.png diag/$b.antigo.png; then echo "novo 1 thread: igual"; else echo "novo 1 thread: DIFERENTE"; fi
+  if cmp -s diag/$b.novo2.png diag/$b.antigo.png; then echo "novo 2 threads: igual"; else echo "novo 2 threads: DIFERENTE"; fi
+  # 3) o primeiro retangulo que estraga a imagem (1 thread)
+  K=1
+  while [ $K -le 80 ]; do
+    BGPMAX=$K ./rp $C $B --threads 1 --out /tmp/k.png > /dev/null 2>&1
+    if ! cmp -s /tmp/k.png diag/$b.antigo.png; then
+      echo "primeiro retangulo errado: $K"
+      cp /tmp/k.png diag/$b.k$K.png
+      BGPMAX=$((K-1)) ./rp $C $B --threads 1 --out diag/$b.k$((K-1)).png > /dev/null 2>&1
+      BGDBG=1 BGPMAX=$K ./rp $C $B --threads 1 2>&1 | grep "^\[fundo\]" | tail -6
+      BGCOVDUMP=$K BGPMAX=$K ./rp $C $B --threads 1 > /dev/null 2>&1; [ -f cov.pgm ] && mv cov.pgm diag/$b.cov$K.pgm
+      if [ $K -gt 1 ]; then BGCOVDUMP=$((K-1)) BGPMAX=$K ./rp $C $B --threads 1 > /dev/null 2>&1; [ -f cov.pgm ] && mv cov.pgm diag/$b.cov$((K-1)).pgm; fi
+      break
+    fi
+    K=$((K+1))
+  done
+  [ $K -gt 80 ] && echo "nenhum dos 80 primeiros retangulos estraga"
+  # 4) tempo
+  for v in "novo:" "sem_parcial:--sem-fundo-parcial"; do
     nome=${v%%:*}; op=${v#*:}
     printf "%-12s " $nome
-    PMFORCE=1 ./rp $C $R $op --repeat 60 2>&1 | grep "^tempo" | tr '\n' ' '
-    echo
+    PMFORCE=1 ./rp $C $R --fundo-parcial $op --repeat 60 2>&1 | grep "^tempo"
   done
-done
-# imagens com e sem o fundo parcial (lote 192) em varias cenas: iguais? (as diferentes ficam em reg_dif/)
-mkdir -p reg_dif
-rm -f reg_dif/*
-for C in reg/*.cap lento_00.cap lento_07.cap ../oot_kakariko/lento_08.cap ../oot_kakariko/lento_10.cap ../oot_kakariko/lento_15.cap; do
-  [ -f $C ] || continue
-  b=$(basename $C .cap)
-  ./rp $C --fast --threads 2 --resolucao 384 --filtro-rapido --out /tmp/a.png > /dev/null 2>&1
-  ./rp $C --fast --threads 2 --resolucao 384 --filtro-rapido --sem-fundo-parcial --out /tmp/b.png > /dev/null 2>&1
-  if cmp -s /tmp/a.png /tmp/b.png; then echo "igual     $b"; else echo "DIFERENTE $b"; cp /tmp/a.png reg_dif/$b.novo.png; cp /tmp/b.png reg_dif/$b.antes.png; fi
 done
 echo fim
 Y

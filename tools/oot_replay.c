@@ -39,9 +39,6 @@ typedef struct {
     uint8_t *data;
 } Page;
 
-int gx_pass_extra; /* (no jogo: gfx_hook.c) */
-static int g_simExtra;
-
 static uint32_t rd32(const uint8_t *p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
@@ -375,13 +372,16 @@ int main(int argc, char **argv) {
             extern int gx_cc_alias;
             gx_cc_alias = 0;
         } else if (!strcmp(argv[i], "--extras")) {
-            g_simExtra = 1;
+            /* (lote 187, removido no 194: aceito e ignorado) */
         } else if (!strcmp(argv[i], "--mistura-desliza") && i + 1 < argc) {
             extern int gx_mistura_desliza;
             gx_mistura_desliza = atoi(argv[++i]); /* 0, 1 (ate 64x64) ou 2 (ate 128x128) */
         } else if (!strcmp(argv[i], "--sem-mistura-desliza")) {
             extern int gx_mistura_desliza;
             gx_mistura_desliza = 0; /* texturas que deslizam misturadas por pixel (como antes do lote 183) */
+        } else if (!strcmp(argv[i], "--fundo-parcial")) {
+            extern int gx_bgpart;
+            gx_bgpart = 1;
         } else if (!strcmp(argv[i], "--sem-fundo-parcial")) {
             extern int gx_bgpart;
             gx_bgpart = 0; /* transparente fecha a janela do fundo adiado (como antes do lote 192) */
@@ -571,11 +571,9 @@ int main(int argc, char **argv) {
             gx.probe[i].y = probeXY[i][1];
             gx.nProbe++;
         }
-        gx_pass_extra = g_simExtra && r % 3 == 1; /* (--extras: 1 desenho em 3 como quadro extra da interpolacao) */
         t0 = now_ms();
         gx_render(dl, NULL);
         dt = now_ms() - t0;
-        gx_pass_extra = 0;
         if (gx_hr_max > 320 && r + 1 == repeat) {
             gx_hr_pass_end(dt); /* (so no ultimo: a tela do N64 recebe a reducao) */
         }

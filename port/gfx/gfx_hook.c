@@ -157,7 +157,6 @@ static int capture_on_request(OSTask *t) {
  * responde esse tanto mais tarde) */
 int port_opt_folga = 1;
 void (*gx_interp_sink)(const void *fb, const uint16_t *const *img, const int *vs, int n);
-int gx_pass_extra;
 int port_opt_extra_adiado = 1;
 /* opcoes.txt quadros_degraus: entre 30 e 20 fps, degraus intermediarios. Um tick "A" mostra 2 imagens
  * (1/3 e o quadro do jogo), um tick "B" mostra 1 (2/3). AB AB... = 30 fps; so B = 20 fps; A seguido de n
@@ -426,9 +425,7 @@ static const uint16_t *interp_pass_to(uint16_t *dst, uint32_t dl, volatile int *
     memset(gx_stN, 0, sizeof gx_stN);
     memset(gx_stNs, 0, sizeof gx_stNs);
     gx_hr_pass_begin(); /* tamanho deste desenho (resolucao dinamica) */
-    gx_pass_extra = step < 1.0f;
     gx_render(dl, yield);
-    gx_pass_extra = 0;
     {
         extern void gx_hr_target_done(const void *fbRaw);
         gx_hr_target_done(gx.cimgRaw);

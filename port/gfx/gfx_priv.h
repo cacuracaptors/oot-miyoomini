@@ -482,7 +482,6 @@ extern int (*gx_tile_lookup)(const void *cmd, uint32_t *w0, uint32_t *w1);
 extern const uint32_t *(*gx_cmd_lookup)(const void *cmd);
 /* quadros intermediarios (gfx_hook.c -> tela): imagens para mostrar antes/no lugar do quadro 'fb' do jogo.
  * img[i] (320x240 RGBA5551 do N64) entra na tela vs[i] vsyncs depois do jogo trocar para 'fb'. */
-extern int gx_pass_extra; /* 1 = desenhando um quadro extra (intermediario) da interpolacao (gfx_hook.c) */
 extern void (*gx_interp_sink)(const void *fb, const uint16_t *const *img, const int *vs, int n);
 
 /* gfx_rdp.c: brilho (gamma) nas cores de entrada (opcao brightness) */
