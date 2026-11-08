@@ -426,6 +426,9 @@ static void samp_null(const FastTex *u, const float *S, const float *T, uint32_t
 
 /* ------------------------------------------------------------------ programa do pixel (por estado) */
 static void fused_check(FastProg *f);
+#ifdef GX_REPLAY_DIAG
+static void diag_ops(const FastProg *f);
+#endif
 
 /* Ceu pre-misturado (lote 121): o ceu mistura 2 texturas por pixel, (T1 - T0) * k + T0 com k constante (a
  * mistura entre dois horarios do dia). Como o filtro e linear, misturar as duas texturas antes (texel a texel, a
@@ -1197,6 +1200,7 @@ static void fast_build(void) {
                     gx.timgRaw, gx.omL, f->fused, f->kern, f->fblm, f->cyc2, f->bilerp, f->needMem, f->crop,
                     f->t[0].w, f->t[0].h, f->t[0].modeS, f->t[0].modeT, f->t[0].pfs,
                     f->useT[1], f->t[1].w, f->t[1].h, f->t[1].modeS, f->t[1].modeT, f->t[1].pfs);
+            diag_ops(f);
         }
     }
 #endif
@@ -1825,6 +1829,22 @@ static const SampNFn g_sampn[2][2][2] = {
 typedef struct {
     uint8_t kind, dst, a, b, c, d; /* kind: 0 copia d, 1 a*c (b = d = 0), 2 (a - b) * c + d */
 } FusedOp;
+#ifdef GX_REPLAY_DIAG
+static void diag_ops(const FastProg *f) { /* (diagnostico: as operacoes do combinador de um programa) */
+    {
+                const FusedOp *o = (const FusedOp *)f->fops;
+                int q;
+                fprintf(stderr, "[prog]   premix %d | fcc %d %d %d %d | %d ops:", g_premixTx != NULL, f->fcc[0], f->fcc[1],
+                        f->fcc[2], f->fcc[3], f->nfops);
+                for (q = 0; q < f->nfops; q++) {
+                    fprintf(stderr, " [k%x d%d %d %d %d %d]", o[q].kind, o[q].dst, o[q].a, o[q].b, o[q].c, o[q].d);
+                }
+                fprintf(stderr, " | c0 %d %d %d %d / %d %d %d %d | prim %d %d %d %d env %d\n", f->c0[0][0], f->c0[0][1],
+                        f->c0[0][2], f->c0[0][3], f->c0[3][0], f->c0[3][1], f->c0[3][2], f->c0[3][3], gx.prim[0],
+                        gx.prim[1], gx.prim[2], gx.prim[3], gx.env[3]);
+            }
+}
+#endif
 
 /* Junta 3 operacoes seguidas que fazem a mesma conta nos canais r, g, b (destino e entradas em indices
  * seguidos; o C pode ser o mesmo nos 3) numa so: o caminho fundido decide o tipo uma vez para os 3.

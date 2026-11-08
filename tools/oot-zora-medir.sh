@@ -19,26 +19,10 @@ cd /mnt/SDCARD/oot_zora || exit 1
 chmod +x ./rp
 echo performance > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
 CEU=800ac100,800b0100,800b0100
-R="--fast --threads 2 --pin --rt 1 --resolucao 384 --filtro-rapido --extras"
-for n in 00 07; do
+for n in 00; do
   C=lento_$n.cap
-  [ -f $C ] || continue
   echo "== $C"
-  BGDBG=1 ./rp $C --fast --threads 2 --resolucao 384 --filtro-rapido 2>&1 | grep "^\[prog\]" | grep "800ac100\|800b0100\|02010eb8\|060025a0\|0200f6b8"
-  for v in "inteiro:" "sem_alias:--sem-alias" "inteiro:" "sem_alias:--sem-alias"; do
-    nome=${v%%:*}; op=${v#*:}
-    printf "%-12s " $nome
-    PMFORCE=1 ./rp $C $R $op --repeat 60 2>&1 | grep "^tempo\|^threads" | tr '\n' ' '
-    echo
-  done
-done
-# imagens com e sem o atalho do combinador (lote 190) em varias cenas: iguais? (as diferentes ficam em reg_dif/)
-mkdir -p reg_dif
-for C in reg/*.cap; do
-  b=$(basename $C .cap)
-  ./rp $C --fast --threads 2 --resolucao 384 --filtro-rapido --out /tmp/a.png > /dev/null 2>&1
-  ./rp $C --fast --threads 2 --resolucao 384 --filtro-rapido --sem-alias --out /tmp/b.png > /dev/null 2>&1
-  if cmp -s /tmp/a.png /tmp/b.png; then echo "igual     $b"; else echo "DIFERENTE $b"; cp /tmp/a.png reg_dif/$b.novo.png; cp /tmp/b.png reg_dif/$b.antes.png; fi
+  BGDBG=1 ./rp $C --fast --threads 2 --resolucao 384 --filtro-rapido 2>&1 | grep -A1 "^\[prog\] tex 800ac100\|^\[prog\] tex 800b0100\|^\[prog\] tex 02010eb8"
 done
 echo fim
 Y
