@@ -382,6 +382,9 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "--sem-mistura-desliza")) {
             extern int gx_mistura_desliza;
             gx_mistura_desliza = 0; /* texturas que deslizam misturadas por pixel (como antes do lote 183) */
+        } else if (!strcmp(argv[i], "--sem-fundo-parcial")) {
+            extern int gx_bgpart;
+            gx_bgpart = 0; /* transparente fecha a janela do fundo adiado (como antes do lote 192) */
         } else if (!strcmp(argv[i], "--sem-fundo")) {
             gx_bgdefer = 0;
         } else if (!strcmp(argv[i], "--nofused")) {

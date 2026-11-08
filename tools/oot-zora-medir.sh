@@ -18,11 +18,27 @@ cat > "$OUT/rodar.sh" <<'Y'
 cd /mnt/SDCARD/oot_zora || exit 1
 chmod +x ./rp
 echo performance > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
-CEU=800ac100,800b0100,800b0100
-for n in 00; do
-  C=lento_$n.cap
+R="--fast --threads 2 --pin --rt 1 --resolucao 384 --filtro-rapido --extras"
+for C in lento_00.cap lento_07.cap ../oot_kakariko/lento_08.cap ../oot_kakariko/lento_10.cap; do
+  [ -f $C ] || continue
   echo "== $C"
-  BGDBG=1 ./rp $C --fast --threads 2 --resolucao 384 --filtro-rapido 2>&1 | grep -A1 "^\[prog\] tex 800ac100\|^\[prog\] tex 800b0100\|^\[prog\] tex 02010eb8"
+  BGDBG=1 ./rp $C --fast --threads 2 --resolucao 384 --filtro-rapido 2>&1 | grep "^\[fundo\] fecha" | head -4
+  for v in "novo:" "sem_parcial:--sem-fundo-parcial" "novo:" "sem_parcial:--sem-fundo-parcial"; do
+    nome=${v%%:*}; op=${v#*:}
+    printf "%-12s " $nome
+    PMFORCE=1 ./rp $C $R $op --repeat 60 2>&1 | grep "^tempo" | tr '\n' ' '
+    echo
+  done
+done
+# imagens com e sem o fundo parcial (lote 192) em varias cenas: iguais? (as diferentes ficam em reg_dif/)
+mkdir -p reg_dif
+rm -f reg_dif/*
+for C in reg/*.cap lento_00.cap lento_07.cap ../oot_kakariko/lento_08.cap ../oot_kakariko/lento_10.cap ../oot_kakariko/lento_15.cap; do
+  [ -f $C ] || continue
+  b=$(basename $C .cap)
+  ./rp $C --fast --threads 2 --resolucao 384 --filtro-rapido --out /tmp/a.png > /dev/null 2>&1
+  ./rp $C --fast --threads 2 --resolucao 384 --filtro-rapido --sem-fundo-parcial --out /tmp/b.png > /dev/null 2>&1
+  if cmp -s /tmp/a.png /tmp/b.png; then echo "igual     $b"; else echo "DIFERENTE $b"; cp /tmp/a.png reg_dif/$b.novo.png; cp /tmp/b.png reg_dif/$b.antes.png; fi
 done
 echo fim
 Y
