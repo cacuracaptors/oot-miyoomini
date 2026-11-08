@@ -6,6 +6,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "gfx_priv.h"
 int port_texgen_old; /* opcao reflexo_antigo: 1 = o mapeamento de reflexo de antes */
@@ -850,6 +851,49 @@ static GxState g_geSnap;
 static const GxCmd *g_geStack[GX_DL_STACK], *g_gePc;
 static int g_geSp;
 
+/* DIAGNOSTICO TEMPORARIO (OOT_REPETICAO=1 no ambiente, ou o arquivo repeticao.txt na pasta do jogo; sai depois da medicao): quantos quadros repetem um quadro
+ * anterior (comandos + vertices + matrizes iguais), para saber se pular o desenho de quadros iguais vale a pena. So a
+ * 1a passada de cada tarefa conta (as intermediarias desenham a mesma lista) */
+static int g_rep = -1, g_repOn;
+static uint64_t g_repH, g_repPrev[2];
+static unsigned g_repN[2], g_repSame1[2], g_repSame2[2];
+extern int port_jump_mode __attribute__((weak));
+static inline void rep_mix(uint64_t v) {
+    g_repH = (g_repH ^ v) * 0x100000001B3ull;
+}
+static void rep_bytes(uint32_t addr, unsigned n) {
+    const uint8_t *p = (const uint8_t *)gx_resolve(addr);
+    unsigned i;
+    if (p == NULL || n > 65536) {
+        return;
+    }
+    for (i = 0; i + 8 <= n; i += 8) {
+        uint64_t v;
+        memcpy(&v, p + i, 8);
+        rep_mix(v);
+    }
+}
+void gx_rep_task(void) {
+    if (g_rep < 0) {
+        g_rep = getenv("OOT_REPETICAO") != NULL || access("repeticao.txt", F_OK) == 0;
+    }
+    g_repOn = g_rep;
+    g_repH = 0xCBF29CE484222325ull;
+}
+static void rep_frame(void) {
+    const int m = (&port_jump_mode != NULL && port_jump_mode) ? 1 : 0; /* 1 = jogando (Link pode agir) */
+    g_repN[m]++;
+    g_repSame1[m] += g_repH == g_repPrev[0];
+    g_repSame2[m] += g_repH == g_repPrev[1];
+    g_repPrev[1] = g_repPrev[0];
+    g_repPrev[0] = g_repH;
+    if ((g_repN[0] + g_repN[1]) % 200 == 0) {
+        fprintf(stderr, "[repeticao] jogando: %u quadros, iguais ao anterior %u, iguais ao de 2 antes %u | "
+                        "fora (pausa, texto, cena, menus): %u quadros, iguais ao anterior %u, iguais ao de 2 antes %u\n",
+                g_repN[1], g_repSame1[1], g_repSame2[1], g_repN[0], g_repSame1[0], g_repSame2[0]);
+    }
+}
+
 int gx_run_dl(uint32_t addr, volatile int *yield) {
     const GxCmd *stack[GX_DL_STACK];
     int sp = 0;
@@ -884,6 +928,14 @@ int gx_run_dl(uint32_t addr, volatile int *yield) {
         gx.curCmd = (uint32_t)(uintptr_t)pc;
         pc++;
         gx.nCmd++;
+        if (g_repOn) { /* (diagnostico OOT_REPETICAO) */
+            rep_mix((uint64_t)w0 << 32 | w1);
+            if (op == GX_VTX) {
+                rep_bytes(w1, ((w0 >> 12) & 0xFF) * 16u);
+            } else if (op == GX_MTX) {
+                rep_bytes(w1, 64);
+            }
+        }
         gx.opHist[op]++;
         if (++guard > 4000000u) {
             gx_log("DL: limite de comandos excedido");
@@ -1154,6 +1206,10 @@ int gx_render(uint32_t dlAddr, volatile int *yield) {
     {
         int r = gx_run_dl(dlAddr, yield);
         gx_batch_flush(); /* a fila do caminho rapido termina junto com a tarefa */
+        if (g_repOn) {
+            rep_frame(); /* (diagnostico OOT_REPETICAO) */
+            g_repOn = 0;
+        }
         return r;
     }
 }
