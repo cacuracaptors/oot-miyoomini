@@ -3824,7 +3824,7 @@ static void batch_publish(void);
  * textura e pintar. A sequencia fica guardada (sem publicar para a auxiliar) ate aparecer outro tipo de
  * trabalho; ai e ordenada pela profundidade mais proxima de cada triangulo e publicada. */
 int gx_sort_opaque = 1;
-int gx_sort_chunk = 160; /* >0: a sequencia ordenada e publicada a cada N triangulos (a auxiliar comeca antes) */
+int gx_sort_chunk = 120; /* (lote 196: 120 medido em 10 cenas no aparelho, -0,8% em media, ate -2,9% em Kakariko; era 160) */ /* >0: a sequencia ordenada e publicada a cada N triangulos (a auxiliar comeca antes) */
 static int g_runFrom = -1;
 /* ordem de desenho: run_jobs desenha g_jobs[g_ord[i]] (os trabalhos nao mudam de lugar; so a ordem e trocada) */
 static uint16_t g_ord[JOB_CAP];
