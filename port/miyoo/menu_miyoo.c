@@ -67,6 +67,8 @@ static const Item k_items[] = {
     R(TAB_GENERAL, "autosave", "Autosave (minutes)", "Salvar sozinho (minutos)", 0, 30, 1),
     R(TAB_GENERAL, "menu_theme", "Menu colors", "Cores do menu", 0, 1, 1),
     R(TAB_GENERAL, "text_speed", "Text speed", "Velocidade do texto", 1, 5, 1),
+    R(TAB_GENERAL, "music_volume", "Music volume (%)", "Volume da música (%)", 0, 150, 10),
+    R(TAB_GENERAL, "sound_volume", "Sound effects volume (%)", "Volume dos efeitos (%)", 0, 150, 10),
     T(TAB_GENERAL, "hold_b_fast_text", "Hold B to fast-forward text", "Segurar B acelera o texto"),
     T(TAB_GENERAL, "skip_cutscenes", "START skips cutscenes", "START pula cenas"),
     { TAB_GENERAL, "@restore", "Restore defaults (all tabs)", "Restaurar padrão (todas as abas)", -1, -1, 0, 0 },

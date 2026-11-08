@@ -5,6 +5,7 @@
  *
  * Os ajustes no codigo do jogo (tools/oot-patch.py) leem as variaveis port_opt_*.
  */
+#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -21,6 +22,21 @@ int port_opt_alarme_vida = 1;  /* bipe de vida baixa */
 int port_opt_sem_tremor = 0;   /* camera nao "treme" com vida baixa (SoH DisableCritWiggle) */
 int port_opt_autosave = 10;   /* SoH: salvar sozinho a cada N minutos (0 = desligado) */
 int port_opt_text_speed = 2; /* SoH: letras por quadro no texto (1 = original) */
+/* volume da musica (sequencias da musica, das fanfarras e dos sons de ambiente) e dos efeitos, em % do original */
+int port_opt_music_volume = 100;
+int port_opt_sound_volume = 100;
+
+/* src/audio/internal/effects.c (tools/oot-patch.py): o volume de cada tocador de sequencias. 2 = efeitos (sons do jogo,
+ * vozes, ocarina); 0, 1 e 3 = musica principal, fanfarras e a musica de fundo extra */
+int Port_AudioVolPct(int player) {
+    const int p = player == 2 ? port_opt_sound_volume : port_opt_music_volume;
+    return p < 0 ? 0 : p > 200 ? 200 : p;
+}
+
+/* o volume do jogo vale ao quadrado (effects.c: appliedVolume = volume^2): a raiz do fator da a amplitude pedida */
+float Port_AudioVolScale(int player) {
+    return sqrtf((float)Port_AudioVolPct(player) / 100.0f);
+}
 int port_opt_tot_medallion_colors = 0; /* SoH: medalhoes coloridos no chao do Templo do Tempo */
 int port_opt_better_bombchu_shopping = 0; /* SoH: bombchus nao esgotam, pacote de 10 por 99 */
 int port_opt_quit_fishing_at_door = 0; /* SoH: parar de pescar saindo pela porta */
@@ -295,6 +311,10 @@ static const struct {
     /* ---------------------------------------------------------------- Enhancements */
     { "Enhancements", "text_speed", "", &port_opt_text_speed,
       "letters the text shows per frame: 1 = original, 2 = twice as fast (like the Redux hack), up to 5. Slow parts the text asks for stay slow" },
+    { "Enhancements", "music_volume", "", &port_opt_music_volume,
+      "music volume in % of the original (music, fanfares and ambience); 100 = original. Above 100 can distort loud parts" },
+    { "Enhancements", "sound_volume", "", &port_opt_sound_volume,
+      "sound effects volume in % of the original (effects, voices, ocarina); 100 = original" },
     { "Enhancements", "autosave", "", &port_opt_autosave,
       "N = the game saves itself (like Save in the pause menu) every N minutes of play (10 = default) and when you leave it (MENU, power-off); a short notice shows. 0 = off" },
     { "Enhancements", "hold_b_fast_text", "segurar_b", &port_opt_segurar_b,
@@ -790,6 +810,8 @@ static const struct {
     { "sprint_speed", 150 },
     { "quick_gear_swap", 0 },
     { "text_speed", 3 },
+    { "music_volume", 100 },
+    { "sound_volume", 100 },
     { "autosave", 10 },
     { "hold_b_fast_text", 1 },
     { "skip_cutscenes", 1 },

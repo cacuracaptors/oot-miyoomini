@@ -1202,6 +1202,22 @@ patch_file("src/audio/internal/seqplayer.c", [
      "channel->unk_22 = PORT_RD_BE16((u8*)(channel->dynTable) + scriptState->value * 2); /* port */"),
 ])
 patch_file("src/audio/internal/effects.c", [
+    ("volume da musica e dos efeitos: declaracoes",
+     "/**\n * original name: __Nas_CallWaveProcess_Sub\n */\n",
+     "/* port: volume da musica e dos efeitos (opcoes music_volume / sound_volume, port_options.c) */\n"
+     "int Port_AudioVolPct(int player);\nfloat Port_AudioVolScale(int player);\n"
+     "static s32 sPortVolPct[4] = { 100, 100, 100, 100 };\n\n"
+     "/**\n * original name: __Nas_CallWaveProcess_Sub\n */\n"),
+    ("volume da musica e dos efeitos: opcao mudou (menu) = recalcula",
+     "    if (seqPlayer->fadeTimer != 0) {\n        seqPlayer->fadeVolume += seqPlayer->fadeVelocity;\n",
+     "    {\n        s32 portIdx = seqPlayer - gAudioCtx.seqPlayers; /* port */\n\n"
+     "        if (portIdx >= 0 && portIdx < 4 && Port_AudioVolPct(portIdx) != sPortVolPct[portIdx]) {\n"
+     "            sPortVolPct[portIdx] = Port_AudioVolPct(portIdx);\n            seqPlayer->recalculateVolume = true;\n        }\n    }\n"
+     "    if (seqPlayer->fadeTimer != 0) {\n        seqPlayer->fadeVolume += seqPlayer->fadeVelocity;\n"),
+    ("volume da musica e dos efeitos: no volume do tocador",
+     "        seqPlayer->appliedFadeVolume = seqPlayer->fadeVolume * seqPlayer->fadeVolumeScale;\n",
+     "        seqPlayer->appliedFadeVolume = seqPlayer->fadeVolume * seqPlayer->fadeVolumeScale *\n"
+     "                                       Port_AudioVolScale(seqPlayer - gAudioCtx.seqPlayers); /* port */\n"),
     ("envelope delay",
      "adsr->delay = adsr->envelope[adsr->envIndex].delay;",
      "adsr->delay = PORT_BE16S(adsr->envelope[adsr->envIndex].delay); /* port */"),
