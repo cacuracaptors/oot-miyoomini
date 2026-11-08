@@ -441,7 +441,7 @@ int gx_ceu_mistura = 1;
  * suave). Refeita quando o deslocamento muda (todo quadro, enquanto desliza). Opcao gx_mistura_desliza
  * (options.txt premix_scrolling: 1 = ate 64x64, a agua; 2 = ate 128x128, tambem o fundo do lago, que mistura uma
  * textura 4x maior; replay --sem-mistura-desliza / --mistura-desliza N). */
-int gx_mistura_desliza = 1;
+int gx_mistura_desliza = 2; /* (padrao 2 desde o lote 188: medido no lago Hylia, 384 -> 416 com o mesmo tempo) */
 typedef struct {
     int sizeS, sizeT;   /* textura misturada */
     int raS, raT;       /* passo da 1a textura por texel da grade, em 1/64 de texel (64 = mesma grade) */
@@ -702,6 +702,24 @@ static GxTex *premix_get(const GxTex *A, const GxTex *B, int v, PremixGeo *pg) {
             premix_row(pa, A->w, A->h, 0, pg->raS, y * pg->raT, pg->sizeS, la);
             premix_row(pb, B->w, B->h, pg->obS, pg->rbS, pg->obT + y * pg->rbT, pg->sizeS, lb);
             premix_lerp8(pm + (size_t)4 * y * pg->sizeS, la, lb, 256 - v, v, 8, 4 * pg->sizeS);
+        }
+        /* a copia com borda (tex_pad, modo repete nos dois eixos) ja pronta, com memcpy: tex_pad faria texel a texel */
+        {
+            const int W = pg->sizeS, H = pg->sizeT, pw = W + 2;
+            uint32_t *pp = (uint32_t *)malloc((size_t)pw * (size_t)(H + 2) * 4u);
+            if (pp != NULL) {
+                int yy;
+                for (yy = -1; yy <= H; yy++) {
+                    const uint32_t *src = m->px + (size_t)(yy & (H - 1)) * W;
+                    uint32_t *dst = pp + (size_t)(yy + 1) * pw;
+                    dst[0] = src[W - 1];
+                    memcpy(dst + 1, src, (size_t)W * 4u);
+                    dst[W + 1] = src[0];
+                }
+                m->pp = pp;
+                m->pw = pw;
+                m->pkey = (uint32_t)W << 4 | (uint32_t)H << 18; /* (= a chave de tex_pad: modos 0/0, clip = tamanho) */
+            }
         }
         g_pmNs += gx_now_ns() - t0;
         g_pmN++;
