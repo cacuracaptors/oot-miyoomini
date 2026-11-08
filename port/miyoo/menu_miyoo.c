@@ -1526,28 +1526,43 @@ static int draw_value(const Item* it, int y, int isSel) {
     }
 }
 
+/* descricao: no cartao de baixo cabem HELP_LINES linhas. Maior que isso: mostra as primeiras e, com a escolha parada
+ * por HELP_GROW_MS, o cartao cresce para cima, por cima da lista, ate caber o texto inteiro (sem rolagem automatica:
+ * era dificil de ler); qualquer botao volta ao tamanho normal (miyoo_menu_key renova g_selAt) */
+#define HELP_GROW_MS 1000.0
+#define HELP_GROW_ANIM_MS 180.0
 static void draw_help(const char* s) {
     static char lines[HELP_MAXL][256];
     const int n = help_split(s, W - 64, lines);
-    int first = 0, i;
+    int i, shown = n < HELP_LINES ? n : HELP_LINES, y0 = HELP_Y;
     if (n > HELP_LINES) {
-        /* maior que o cartao: mostra 4 linhas, espera e vai descendo uma linha de cada vez (e volta ao comeco) */
-        const int steps = n - HELP_LINES + 1;
         const double t = miyoo_now_ms() - g_selAt;
-        first = t < 3500.0 ? 0 : (int)((t - 3500.0) / 2200.0) % (steps + 1);
-        if (first >= steps) {
-            first = 0;
-        }
-        g_anim = 1;
-        if (first > 0) {
-            chevron(W - 28, HELP_Y + 14, 6, 2, TH(accent));
-        }
-        if (first + HELP_LINES < n) {
+        if (t < HELP_GROW_MS) {
+            g_anim = 1; /* (redesenha ate a hora de crescer) */
             chevron(W - 28, HELP_Y + HELP_H - 14, 6, 3, TH(accent));
+        } else {
+            /* cresce para cima (animado), o fundo do cartao no mesmo lugar */
+            const int full = n * HELP_LH + 10;
+            int h = full;
+            float k = (float)((t - HELP_GROW_MS) / HELP_GROW_ANIM_MS);
+            if (k < 1.0f) {
+                g_anim = 1;
+                h = HELP_H + (int)((float)(full - HELP_H) * k);
+            }
+            if (HELP_Y + HELP_H - h < LIST_Y) {
+                h = HELP_Y + HELP_H - LIST_Y;
+            }
+            y0 = HELP_Y + HELP_H - h;
+            shadow(10, y0, W - 20, h, 14);
+            rrect(10, y0, W - 20, h, 14, TH(help), 255);
+            shown = (h - 10) / HELP_LH;
+            if (shown > n) {
+                shown = n;
+            }
         }
     }
-    for (i = 0; i < HELP_LINES && first + i < n; i++) {
-        big(24, HELP_Y + 6 + i * HELP_LH, lines[first + i], TH(helpText));
+    for (i = 0; i < shown; i++) {
+        big(24, y0 + 6 + i * HELP_LH, lines[i], TH(helpText));
     }
 }
 
