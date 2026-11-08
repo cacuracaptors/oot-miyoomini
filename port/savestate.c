@@ -1004,7 +1004,9 @@ void port_ss_input_tick(void) {
         request_exit(EXIT_POWEROFF);
     }
     if (g_exitKind >= 0 && now_ms() - g_exitAt > 5000.0) {
-        fprintf(stderr, "[estado] o jogo nao chegou a um ponto seguro em 5 s\n");
+        extern void os_dump_threads(int sig); /* platform/os_core.c */
+        fprintf(stderr, "[estado] o jogo nao chegou a um ponto seguro em 5 s; onde cada thread do jogo esta parada:\n");
+        os_dump_threads(SIGUSR2); /* (port_main.c mostra a pilha de cada uma; so acontece com o jogo preso) */
         exit_without_state(g_exitKind);
     }
 }
