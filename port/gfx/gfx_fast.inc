@@ -475,6 +475,8 @@ typedef struct {
     uint64_t ka, kb;
     int v, used;
     uint64_t geo; /* forma da mistura deslocada/escalada (0 = as duas tiles iguais; lote 183) */
+    uint32_t shape; /* (so tamanhos e passos, sem o deslocamento) e a tile da mistura: reaproveitada nos quadros extras */
+    GxTile tile;
     GxTex *m; /* (estrutura propria: ao refazer, a antiga vai para a fila de aposentadas) */
 } PremixEnt;
 static PremixEnt g_pm[PREMIX_N];
@@ -627,7 +629,7 @@ static void premix_row(const uint8_t *px, int w, int h, int oS, int rS, int posT
     }
 }
 
-static GxTex *premix_get(const GxTex *A, const GxTex *B, int v, const PremixGeo *pg) {
+static GxTex *premix_get(const GxTex *A, const GxTex *B, int v, PremixGeo *pg) {
     PremixEnt *e = NULL;
     GxTex *m;
     int i, n;
@@ -635,11 +637,22 @@ static GxTex *premix_get(const GxTex *A, const GxTex *B, int v, const PremixGeo 
                          : (((uint64_t)(uint32_t)pg->obS << 40) ^ ((uint64_t)(uint32_t)pg->obT << 20) ^
                             (uint64_t)(uint32_t)(pg->sizeS << 12 | pg->sizeT << 4) ^
                             ((uint64_t)(uint32_t)(pg->raS ^ pg->raT << 7 ^ pg->rbS << 14 ^ pg->rbT << 21) << 30)) | 1;
+    const uint32_t shape = pg == NULL ? 0
+                           : (uint32_t)(pg->sizeS << 24 ^ pg->sizeT << 16 ^ pg->raS << 12 ^ pg->raT << 8 ^ pg->rbS << 4 ^
+                                        pg->rbT) | 1u;
     for (i = 0; i < PREMIX_N; i++) {
         if (g_pm[i].a == A && g_pm[i].b == B && g_pm[i].ka == A->key && g_pm[i].kb == B->key && g_pm[i].m != NULL) {
             e = &g_pm[i];
             break;
         }
+    }
+    if (e != NULL && pg != NULL && gx_pass_extra && e->shape == shape && abs(e->v - v) < 3) {
+        /* quadro extra (intermediario): a mistura do ultimo quadro do jogo, com a tile dela - a textura que desliza fica
+         * onde estava no quadro do jogo (como sem a interpolacao das texturas que deslizam; nao se nota) e nao se
+         * refaz a mistura 1 vez em cada 3 desenhos */
+        pg->tile = e->tile;
+        e->used = ++g_pmClock;
+        return e->m;
     }
 #ifdef GX_REPLAY_DIAG
     if (e != NULL && geo != 0 && getenv("PMFORCE")) {
@@ -708,6 +721,10 @@ static GxTex *premix_get(const GxTex *A, const GxTex *B, int v, const PremixGeo 
     e->kb = B->key;
     e->v = v;
     e->geo = geo;
+    e->shape = shape;
+    if (pg != NULL) {
+        e->tile = pg->tile;
+    }
     e->used = ++g_pmClock;
     return e->m;
 }
@@ -865,7 +882,7 @@ static void fast_build(void) {
         const int same = ok && A != B && A->w == B->w && A->h == B->h && ta->shifts == tb->shifts && ta->shiftt == tb->shiftt &&
                          ta->uls == tb->uls && ta->ult == tb->ult && ta->masks == tb->masks && ta->maskt == tb->maskt &&
                          ta->cms == tb->cms && ta->cmt == tb->cmt;
-        const PremixGeo *pg = NULL;
+        PremixGeo *pg = NULL;
         int kv = -1, msel = -1;
         g_premixTile = 0;
         if (ok && !same) {

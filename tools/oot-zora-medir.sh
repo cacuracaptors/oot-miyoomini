@@ -24,9 +24,9 @@ for n in 00 07; do
   [ -f $C ] || continue
   echo "== $C"
   for m in 0 1 2; do
-    # PMFORCE: refaz a mistura em toda repeticao, como no jogo com a agua deslizando
+    # PMFORCE + --extras: refaz a mistura nos desenhos do jogo (2 em 3), como com a agua deslizando
     printf "premix_scrolling=%s  " $m
-    PMFORCE=1 ./rp $C --fast --threads 2 --pin --rt 1 --resolucao 384 --filtro-rapido --mistura-desliza $m --repeat 60 2>&1 | grep "^tempo\|^misturas\|^borda" | tr '\n' ' '
+    PMFORCE=1 ./rp $C --fast --threads 2 --pin --rt 1 --resolucao 384 --filtro-rapido --extras --mistura-desliza $m --repeat 60 2>&1 | grep "^tempo\|^misturas\|^borda" | tr '\n' ' '
     echo
   done
 done
