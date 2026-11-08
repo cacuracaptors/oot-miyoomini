@@ -990,9 +990,12 @@ static int rt_build(int mode, int forca) {
     const size_t n = (size_t)PANEL_W * PANEL_H;
     int x, y;
     unsigned line, mk;
-    if (rt_virt == NULL && !rt_strip && rs_virt != NULL && getenv("OOT_FILTRO_FAIXA") != NULL) {
-        rt_strip = 1; /* (teste: a faixa mesmo com memoria para a camada inteira) */
-        fprintf(stderr, "video: filtro retro em faixas de %d linhas (OOT_FILTRO_FAIXA)\n", RT_STRIP);
+    if (rt_virt == NULL && !rt_strip && rs_virt != NULL && (PANEL_W != 640 || getenv("OOT_FILTRO_FAIXA") != NULL)) {
+        /* na tela de 752x560, sempre a faixa: a camada inteira (752x560 girada 180 pelo chip 2D) saia com uma faixa de
+         * ~8 linhas sem o filtro perto de baixo (imagem do Game Switcher do Mini Flip, 11/2026); a faixa vai sem giro.
+         * OOT_FILTRO_FAIXA: o mesmo na tela de 640x480 (teste) */
+        rt_strip = 1;
+        fprintf(stderr, "video: filtro retro em faixas de %d linhas\n", RT_STRIP);
     }
     if (rt_virt == NULL && !rt_strip) {
         void* v = NULL;
