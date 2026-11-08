@@ -618,10 +618,23 @@ static void cmd_tri1(uint32_t w0) {
 /* quadros intermediarios: matriz interpolada no lugar da Mtx do jogo (NULL = nenhuma) */
 const float *(*gx_mtx_lookup)(const void *mtx);
 
+/* gIdentityMtx do jogo original (codigo do N64, US 1.1; baseroms/ntsc-1.1/config.yml do decomp): algumas salas trazem nas
+ * listas de desenho o endereco fixo dela (o Jabu-Jabu: gsSPMatrix(0x800FEF70) antes do teste da caixa de cada pedaco). No
+ * port o codigo do jogo nao fica ali, e o endereco na RAM do N64 tem outros dados: a caixa saia com uma matriz qualquer, o
+ * teste dava "fora da tela" e partes da sala sumiam ate o Link chegar perto (11/2026) */
+#define GX_N64_IDENTITY_MTX 0x800FEF70u
+
 static void cmd_mtx(uint32_t w0, uint32_t w1) {
     uint32_t p = (w0 & 0xFF) ^ 1u; /* G_MTX_PUSH invertido na codificacao do F3DEX2 */
-    const uint32_t *src = (const uint32_t *)gx_resolve(w1);
+    const uint32_t *src;
     float L[16];
+    if (w1 == GX_N64_IDENTITY_MTX) {
+        static const float id[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
+        memcpy(L, id, sizeof L);
+        src = NULL;
+        goto loaded;
+    }
+    src = (const uint32_t *)gx_resolve(w1);
     if (src == NULL) {
         return;
     }
@@ -661,6 +674,7 @@ static void cmd_mtx(uint32_t w0, uint32_t w1) {
         fprintf(stderr, "[trace] visao addr=%08x: olho=(%.1f %.1f %.1f) olhando para (%.3f %.3f %.3f) cima=(%.3f %.3f %.3f)\n", w1,
                 ex, ey, ez, -L[2], -L[6], -L[10], L[1], L[5], L[9]);
     }
+loaded:
     if (p & 4) { /* projecao */
         if (p & 2) {
             memcpy(gx.proj, L, sizeof L);
