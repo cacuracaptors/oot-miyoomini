@@ -596,6 +596,9 @@ int main(int argc, char **argv) {
         if (pn) {
             printf("misturas deslocadas refeitas: %u (%.3f ms cada)\n", pn, pms / pn);
         }
+        printf("borda %u (%.3f ms cada), filtro pre-calculado %u (%.3f ms cada), filas esvaziadas %u\n", gx_stN[1],
+               gx_stN[1] ? (double)gx_stNs[1] / 1e6 / gx_stN[1] : 0.0, gx_stN[2],
+               gx_stN[2] ? (double)gx_stNs[2] / 1e6 / gx_stN[2] : 0.0, gx_stN[3]);
     }
     {
         /* divisao do trabalho entre as threads (media por quadro) */
