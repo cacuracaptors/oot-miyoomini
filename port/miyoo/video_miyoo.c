@@ -1480,20 +1480,29 @@ static void page_to_small(const uint32_t* src, uint32_t* dst) {
     }
 }
 
+/* A thread de tela continua trabalhando enquanto o jogo copia a tela para a imagem do Game Switcher (~100 ms): ela troca
+ * de pagina e desenha o quadro seguinte na que estava sendo lida (a imagem, depois o HUD, por ultimo o filtro retro). As
+ * linhas lidas entre a imagem nova e o filtro saiam sem ele: uma faixa clara em lugar diferente a cada vez (Mini Flip,
+ * 11/2026). A copia agora e feita com a thread de tela parada entre dois quadros (video_hold) */
+static int g_vhold, g_vidle;
+static void video_hold(int on);
+
 int miyoo_video_front(const uint32_t** page) {
-    static uint32_t* small;
+    static uint32_t* snap;
     if (fb_mem == NULL) {
         return 0;
     }
-    if (PANEL_W == MENU_W && PANEL_H == MENU_H) {
-        *page = fb_page_ptr(fb_page);
-        return 1;
-    }
-    if (small == NULL && (small = (uint32_t*)malloc((size_t)MENU_W * MENU_H * 4)) == NULL) {
+    if (snap == NULL && (snap = (uint32_t*)malloc((size_t)MENU_W * MENU_H * 4)) == NULL) {
         return 0;
     }
-    page_to_small(fb_page_ptr(fb_page), small);
-    *page = small;
+    video_hold(1);
+    if (PANEL_W == MENU_W && PANEL_H == MENU_H) {
+        memcpy(snap, fb_page_ptr(fb_page), (size_t)MENU_W * MENU_H * 4);
+    } else {
+        page_to_small(fb_page_ptr(fb_page), snap);
+    }
+    video_hold(0);
+    *page = snap;
     return 1;
 }
 
@@ -1685,6 +1694,29 @@ static void hook_vi_present(const void* fb, const OSViMode* mode, int blank) {
     pthread_mutex_unlock(&flip_mx);
 }
 
+/* on = 1: espera a thread de tela parar entre dois quadros (no maximo 300 ms) e a segura ali; on = 0: solta */
+static void video_hold(int on) {
+    pthread_mutex_lock(&flip_mx);
+    g_vhold = on;
+    pthread_cond_broadcast(&flip_cv);
+    if (on && flip_started && !flip_done) {
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_nsec += 300 * 1000000L;
+        if (ts.tv_nsec >= 1000000000L) {
+            ts.tv_sec++;
+            ts.tv_nsec -= 1000000000L;
+        }
+        while (!g_vidle && !flip_done) {
+            if (pthread_cond_timedwait(&flip_cv, &flip_mx, &ts) != 0) {
+                fprintf(stderr, "video: a tela nao parou em 300 ms para a copia\n");
+                break;
+            }
+        }
+    }
+    pthread_mutex_unlock(&flip_mx);
+}
+
 static void* flip_proc(void* arg) {
     int buf = 0, frames = 0, fast = 0, ticks = 0, modeRetry = 0;
     double last_tick = 0, last_print = 0, t_conv = 0, t_ccpu = 0, t_show = 0, tmin = 1e9, tmax = 0;
@@ -1699,8 +1731,18 @@ static void* flip_proc(void* arg) {
         int w, h, blank, job, le = 0;
         double t0, t1, c0;
         pthread_mutex_lock(&flip_mx);
-        while (!pend_new && !flip_quit && !(clock_on && fb_pages == 2)) {
+        while (g_vhold && !flip_quit) { /* (video_hold: a copia da tela para o Game Switcher) */
+            g_vidle = 1;
+            pthread_cond_broadcast(&flip_cv);
             pthread_cond_wait(&flip_cv, &flip_mx);
+        }
+        g_vidle = 0;
+        while (!pend_new && !flip_quit && !g_vhold && !(clock_on && fb_pages == 2)) {
+            pthread_cond_wait(&flip_cv, &flip_mx);
+        }
+        if (g_vhold && !flip_quit) {
+            pthread_mutex_unlock(&flip_mx);
+            continue; /* (parou esperando: a copia pediu a tela parada) */
         }
         if (flip_quit) {
             flip_done = 1;
