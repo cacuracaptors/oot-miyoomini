@@ -205,6 +205,7 @@ This port cross-compiles for ARMv7 hard-float on Windows + WSL2, with the
 - Zelda 64 ITA (Italian translation, v1.00, 2001) by XXcentury, with Rulesless and Brisma; graphics from Patcher64+
   (GhostlyDark)
 - Spanish translation (v2.2) by eduardo_a2j (Dorando project), as packaged by Patcher64+ (Admentus, GhostlyDark)
+- HD title logo: textures from Djipi's 3DS Experience, a texture pack for Ship of Harkinian, by Djipi
 - Audio microcode in C based on mupen64plus's HLE
 - Miyoo Mini toolchain by Shaun Inman - https://github.com/shauninman/union-miyoomini-toolchain
 - Options menu font: DejaVu Sans - https://dejavu-fonts.github.io
@@ -213,9 +214,26 @@ This port cross-compiles for ARMv7 hard-float on Windows + WSL2, with the
 
 ## License
 
-The decompilation this port is based on comes with its own terms; the code added for the Miyoo Mini Plus follows
-the same terms. The Legend of Zelda is a trademark of Nintendo; no game data is included - you need your own copy
-of the game.
+The code written for this port is under the MIT License (see `LICENSE`): the renderer (`port/gfx`), the Miyoo Mini
+video, input, sound output and menu (`port/miyoo`), the OS layer (`platform`), save states, frame interpolation,
+options, languages, the patch scripts' own code and the build and release tools (`tools`).
+
+These parts come from other projects and keep their own terms; they are not covered by the MIT License:
+
+- The Ocarina of Time decompilation (zeldaret/oot), which the build patches and compiles; it has no license of its
+  own. The patches in `tools/oot-patch.py` change its files.
+- The enhancements, fixes and cheats that follow Ship of Harkinian's code (`tools/oot-patch-soh.py`) and the texture
+  name table from Shipwright's asset maps (`tools/hd/ntsc11_texturas.tsv`). Shipwright has no license file; treat
+  these as Ship of Harkinian's.
+- The audio and JPEG microcode in C (`port/audio/audio_hle.c`, `port/audio/audio_hle.h`, `port/jpeg_hle.c`), which
+  follow mupen64plus's rsp-hle: GPL-2.0-or-later, like mupen64plus.
+- `port/inflate.c`, written after Mark Adler's puff.c (zlib license).
+- The menu and message fonts (`port/miyoo/font_menu.h`, `port/miyoo/font8x16.h`), rendered from DejaVu Sans
+  (Bitstream Vera / DejaVu font license).
+- The fan translations (`idiomas/`) and the HD title logo textures (`texturas_hd.pak`, converted from Djipi's 3DS
+  Experience texture pack for Ship of Harkinian), which belong to their authors (see Credits).
+
+The Legend of Zelda is a trademark of Nintendo; no game data is included - you need your own copy of the game.
 
 ## AI-Assisted
 

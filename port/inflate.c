@@ -1,4 +1,4 @@
-/* inflate.c -- DEFLATE cru (RFC 1951). Algoritmo do puff.c (Mark Adler, dominio publico). */
+/* inflate.c -- DEFLATE cru (RFC 1951). Algoritmo do puff.c (Mark Adler, licenca zlib). */
 #include "inflate.h"
 
 #include <string.h>
