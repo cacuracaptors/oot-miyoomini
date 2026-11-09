@@ -14,7 +14,8 @@ from your European ROM.
 
 ### Graphics and performance
 
-- Native 640x480 with dynamic resolution: the 3D picture gets sharper or softer by itself to keep the game smooth,
+- Native resolution with dynamic resolution (640x480 on the Mini Plus and Mini; 752x560, the screen's own size, on
+  the Mini v4 and Mini Flip): the 3D picture gets sharper or softer by itself to keep the game smooth,
   with a target frame time you can choose. It can go from 640 down to 320 pixels wide (as on the N64), but in
   practice it rarely drops much: on the Mini Plus (1800 MHz) it stays at or near the full 640 most of the time, and
   only goes down a little in the busiest areas, like the Kokiri and Kakariko villages. On the models limited to 1600 MHz (Mini, Mini v4, Mini Flip) it
@@ -26,7 +27,7 @@ from your European ROM.
   dithering
 - The HUD, the dialog boxes and the title logo are drawn by the chip's 2D engine at full 640x480 (sharp text)
 - Optional retro filter (CRT look): scanlines, or scanlines with an RGB mask, with adjustable strength; the game
-  is then drawn at the N64's 320x240, so every game line matches the filter's lines
+  is then drawn at the N64's 320x240 (376x280 on the 752x560 screens), so every game line matches the filter's lines
 - A new HD title logo
 - Adjustable brightness (gamma) without any cost: Select+Up/Down during the game
 - CPU clock picked by device (1800 MHz on the Mini Plus, 1600 MHz on the Mini, Mini v4 and Mini Flip), kept
@@ -60,6 +61,7 @@ from your European ROM.
 - 10 save state slots with pictures, plus the quick state (Menu+R2 saves, Menu+L2 loads)
 - The game and the sound pause while the menu is open; options that need a restart ask before restarting, and the
   game goes on from where it was
+- Separate music and sound effect volume
 - Restore defaults, and quit with an autosave
 - Two color themes
 - Everything is also in `options.txt`, in the game folder

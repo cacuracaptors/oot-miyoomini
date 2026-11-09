@@ -78,7 +78,10 @@ FEATURES
 - A new HD title logo; adjustable brightness (Select+Up/Down)
 - Optional retro filter (CRT look): scanlines, or scanlines with an RGB
   mask, with adjustable strength; the game is then drawn at the N64's
-  320x240, so every game line matches the filter's lines
+  320x240 (376x280 on the Mini v4 and Mini Flip), so every game line
+  matches the filter's lines
+- Mini v4 and Mini Flip: the game runs at the screen's own 752x560
+- Separate music and sound effect volume (in the options menu)
 - CPU clock picked by device (1800 MHz on the Mini Plus, 1600 MHz on the
   Mini, Mini v4 and Mini Flip)
 - Manual jump button, mid-air steering, smooth D-pad turning, natural and
