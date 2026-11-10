@@ -291,10 +291,29 @@ static HrSlot *slot_of(const uint8_t *ram) {
     return NULL;
 }
 
+/* telas do N64 que ja foram para a tela (tambem em 320x240, quando nao ha imagem maior): o fundo da pausa em 320x240
+ * (pbg_begin) so vale numa delas */
+static const uint8_t *g_fbSeen[4];
+
+static int fb_seen(const uint8_t *fb) {
+    int i;
+    for (i = 0; i < 4; i++) {
+        if (fb != NULL && g_fbSeen[i] == fb) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 void gx_hr_screen(const void *fbRaw) {
     const uint8_t *fb = (const uint8_t *)fbRaw;
     HrSlot *s;
     int i, best = 0;
+    if (fb != NULL && !fb_seen(fb)) {
+        static int k;
+        g_fbSeen[k] = fb;
+        k = (k + 1) & 3;
+    }
     if (fb == NULL || gx_hr_max <= FB_W) {
         return;
     }
@@ -1224,9 +1243,12 @@ static void pbg_begin(void) {
     HrSlot *s = g_cur;
     g_pbgSkip = 0;
     if (g_pbgValid && g_pbg != NULL && !gx.hrActive && gx.cimgRaw != NULL && gx.cimgRawW == FB_W && gx.cimg.siz == 2 &&
-        gx.cimg.addr == gx.cimgRaw && slot_of(gx.cimgRaw) != NULL) {
+        gx.cimg.addr == gx.cimgRaw && (slot_of(gx.cimgRaw) != NULL || fb_seen(gx.cimgRaw))) {
         /* menu de pausa desenhado em 320x240 (pause_menu_320): o fundo vem da imagem maior guardada, reduzida com media,
-         * direto na tela do N64 (a copia que o jogo guardou no z-buffer da RAM nao e usada: la ficava o z) */
+         * direto na tela do N64 (a copia que o jogo guardou no z-buffer da RAM nao e usada: la ficava o z).
+         * fb_seen: tambem quando o jogo inteiro roda em 320x240 (filtro retro, ou resolucao 320 desde a abertura), sem
+         * imagem maior nem vagas: antes, o fundo ia pela copia do jogo, como textura, e levava o brilho (gamma) de novo
+         * (com o filtro ligado ao abrir, +4 de brilho: a pausa clareava; 11/2026) */
         gx_batch_flush();
         reduce_box(g_pbg, g_pbgW, g_pbgH, (uint8_t *)gx.cimg.addr, gx_hr_le);
         g_pbgSkip = 1;
