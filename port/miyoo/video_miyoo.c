@@ -975,9 +975,9 @@ static void rt_reserve(void) {
  * uma tela de tubo (ajustada pixel a pixel ao contorno de uma foto de referencia, 11/2026): as quatro bordas curvas de
  * ponta a ponta (cada lado abaulado, entrando 2,5% da largura nos cantos e 4,5% da altura em cima e embaixo), os
  * cantos arredondados em "superelipse" (raio de 8% da altura, norma 4: mais cheios que um circulo), uma borda preta
- * minima (1% da altura) e a imagem escurecendo perto da borda (ate 40% na borda, numa faixa de 13% da largura). Feito so quando a camada e montada: no desenho de cada quadro nao custa nada (a mesma camada). */
+ * minima (1% da altura) e um leve escurecido so junto da borda (ate 40% na borda, numa faixa de 2,5% da altura). Feito so quando a camada e montada: no desenho de cada quadro nao custa nada (a mesma camada). */
 static unsigned rt_frame(int tv, int x, int y) {
-    const float W = (float)PANEL_W, H = (float)PANEL_H, m = H * 0.01f, r = H * 0.08f, band = W * 0.13f;
+    const float W = (float)PANEL_W, H = (float)PANEL_H, m = H * 0.01f, r = H * 0.08f, band = H * 0.025f;
     const float u = fabsf(((float)x + 0.5f) / W * 2.0f - 1.0f), v = fabsf(((float)y + 0.5f) / H * 2.0f - 1.0f);
     float dx, dy, qx, qy, ox, oy, d, t, f, cov;
     if (!tv) {
