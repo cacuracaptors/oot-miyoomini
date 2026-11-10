@@ -79,7 +79,8 @@ FEATURES
 - Optional retro filter (CRT look): scanlines, or scanlines with an RGB
   mask, with adjustable strength; the game is then drawn at the N64's
   320x240 (376x280 on the Mini v4 and Mini Flip), so every game line
-  matches the filter's lines
+  matches the filter's lines, and an optional CRT screen shape (curved
+  edges, rounded corners, slightly darker border)
 - Mini v4 and Mini Flip: the game runs at the screen's own 752x560
 - Separate music and sound effect volume (in the options menu)
 - CPU clock picked by device (1800 MHz on the Mini Plus, 1600 MHz on the

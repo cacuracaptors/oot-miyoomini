@@ -27,7 +27,8 @@ from your European ROM.
   dithering
 - The HUD, the dialog boxes and the title logo are drawn by the chip's 2D engine at full 640x480 (sharp text)
 - Optional retro filter (CRT look): scanlines, or scanlines with an RGB mask, with adjustable strength; the game
-  is then drawn at the N64's 320x240 (376x280 on the 752x560 screens), so every game line matches the filter's lines
+  is then drawn at the N64's 320x240 (376x280 on the 752x560 screens), so every game line matches the filter's lines,
+  and an optional CRT screen shape (curved edges, rounded corners, slightly darker border)
 - A new HD title logo
 - Adjustable brightness (gamma) without any cost: Select+Up/Down during the game
 - CPU clock picked by device (1800 MHz on the Mini Plus, 1600 MHz on the Mini, Mini v4 and Mini Flip), kept
