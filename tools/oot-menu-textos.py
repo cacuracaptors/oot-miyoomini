@@ -555,6 +555,7 @@ UI = {
 "Checking for updates...": "アップデートを確認中…",
 "You have the latest version:": "最新バージョンです：",
 "New version available:": "新しいバージョンがあります：",
+"use Check for updates": "「アップデートを確認」を使ってください",
 "you have": "現在",
 "No internet: turn on Wi-Fi in OnionOS": "インターネットなし：OnionOSでWi-Fiをオン",
 "Could not check for updates": "アップデートを確認できませんでした",

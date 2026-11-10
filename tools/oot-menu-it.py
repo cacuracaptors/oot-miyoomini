@@ -345,6 +345,7 @@ UI_IT = {
     "Checking for updates...": "Ricerca aggiornamenti...",
     "You have the latest version:": "Hai già l'ultima versione:",
     "New version available:": "Nuova versione disponibile:",
+    "use Check for updates": "usate Cerca aggiornamenti",
     "you have": "hai",
     "No internet: turn on Wi-Fi in OnionOS": "Niente internet: attivate il Wi-Fi in OnionOS",
     "Could not check for updates": "Impossibile cercare aggiornamenti",

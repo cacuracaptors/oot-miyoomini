@@ -666,6 +666,7 @@ UI_EU = {
 "Checking for updates...": ("Suche nach Updates...", "Recherche des mises à jour..."),
 "You have the latest version:": ("Neueste Version installiert:", "Vous avez la dernière version :"),
 "New version available:": ("Neue Version verfügbar:", "Nouvelle version disponible :"),
+"use Check for updates": ("\"Nach Updates suchen\" verwenden", "utilisez \"Rechercher des mises à jour\""),
 "you have": ("installiert", "vous avez"),
 "No internet: turn on Wi-Fi in OnionOS": ("Kein Internet: WLAN in OnionOS einschalten", "Pas d'internet : activez le Wi-Fi dans OnionOS"),
 "Could not check for updates": ("Updates konnten nicht geprüft werden", "Impossible de rechercher les mises à jour"),

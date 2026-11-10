@@ -454,7 +454,7 @@ static uint16_t (*g_thumbs)[THUMB_W * THUMB_H];
 static int g_thumbOk[NSLOTS];
 static volatile int g_slotsDirty = 1;
 static int g_saveArmed = -1; /* estado com o 1o X (gravar por cima pede o 2o) */
-static char g_status[64];
+static char g_status[192];
 static double g_statusUntil;
 
 static void load_slots(void) {
@@ -498,12 +498,19 @@ static int g_updN, g_updTop, g_updWrapped;
 static volatile int g_open;
 static const char* tr(const char* en, const char* pt);
 
-void miyoo_menu_update_result(int code, const char* latest, const char* cur, const char* notes) {
-    char buf[96];
+void miyoo_menu_update_result(int code, const char* latest, const char* cur, const char* notes, int automatic) {
+    char buf[192];
     if (code == MIYOO_UPD_LATEST) {
         snprintf(buf, sizeof buf, "%s v%s", tr("You have the latest version:", "Você já tem a versão mais nova:"),
                  cur[0] == 'v' || cur[0] == 'V' ? cur + 1 : cur);
         status_ms(buf, 8000.0);
+    } else if (code == MIYOO_UPD_NEWER && automatic) {
+        /* a procura automatica (ao abrir o menu, uma vez por dia): so avisa, e so com o menu aberto */
+        if (g_open) {
+            snprintf(buf, sizeof buf, "%s %s - %s", tr("New version available:", "Versão nova disponível:"), latest,
+                     tr("use Check for updates", "use Procurar atualizações"));
+            status_ms(buf, 12000.0);
+        }
     } else if (code == MIYOO_UPD_NEWER) {
         snprintf(g_updTitle, sizeof g_updTitle, "%s %s", tr("New version available:", "Versão nova disponível:"), latest);
         if (cur[0]) {
@@ -681,6 +688,7 @@ void miyoo_menu_open(void) {
         g_dirty = 1;
         g_open = 1;
         fprintf(stderr, "menu: aberto\n");
+        port_update_check_start(1); /* (uma vez por dia, so com Wi-Fi; nao segura o menu: roda numa thread) */
     }
 }
 
@@ -748,7 +756,7 @@ static void change(const Item* it, int dir) {
         const int which = action_id(it->name);
         if (which == 5) {
             /* procurar atualizacoes: um A so (nao muda nada no jogo) */
-            if (port_update_check_start()) {
+            if (port_update_check_start(0)) {
                 status_ms(tr("Checking for updates...", "Procurando atualizações..."), 30000.0);
             }
             return;
@@ -1689,7 +1697,7 @@ static void draw_footer(void) {
     int x = 16;
     if (g_status[0] && miyoo_now_ms() < g_statusUntil) {
         g_anim = 1;
-        big(16, FOOT_Y - 2, g_status, TH(status));
+        big_fit(16, W - 16, FOOT_Y - 2, g_status, TH(status), 1); /* (aviso comprido rola, como os nomes) */
         return;
     }
     x = key_hint(x, "L1 R1", tr("tab", "aba"));

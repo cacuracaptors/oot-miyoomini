@@ -51,8 +51,8 @@ void miyoo_menu_status(const char* text);
 void miyoo_menu_slots_changed(void);
 /* atualizacoes (update_miyoo.c): o resultado de "Procurar atualizacoes" volta ao menu */
 enum { MIYOO_UPD_LATEST, MIYOO_UPD_NEWER, MIYOO_UPD_NO_NET, MIYOO_UPD_ERROR };
-void miyoo_menu_update_result(int code, const char* latest, const char* cur, const char* notes);
-int port_update_check_start(void);
+void miyoo_menu_update_result(int code, const char* latest, const char* cur, const char* notes, int automatic);
+int port_update_check_start(int automatic);
 int miyoo_menu_active(void);
 int miyoo_menu_dirty(void);
 void miyoo_menu_open(void);

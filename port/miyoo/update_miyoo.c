@@ -3,7 +3,8 @@
  * publicado do port e compara com a versao instalada (version.txt na pasta do jogo, gravado pelo tools/oot-package.sh).
  *
  * Etapa 1 (lote 223): so procura e mostra o "What's new" do release novo (o texto da pagina do release). O download e a
- * instalacao vem nas proximas etapas.
+ * instalacao vem nas proximas etapas. Lote 224: ao abrir o menu, procura sozinha uma vez por dia e, se houver versao
+ * nova, so avisa (a janela "What's new" fica para quando o jogador escolhe a opcao).
  *
  * A rede: o OnionOS, ao abrir um jogo, desliga so os servidores (SSH, FTP, Samba...), nao o Wi-Fi. O pedido vai pelo
  * curl do proprio OnionOS (o mesmo do atualizador dele), com a conexao HTTPS conferida pela lista de certificados que
@@ -19,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "miyoo.h"
@@ -29,8 +31,12 @@ extern char** environ;
 #define UPD_JSON "/tmp/oot_update.json"
 #define UPD_CODE "/tmp/oot_update.code"
 #define UPD_ERR "/tmp/oot_update.err"
+#define UPD_STAMP "update_check.txt" /* (na pasta do jogo) quando foi a ultima procura que o GitHub respondeu */
+#define UPD_EVERY (24 * 60 * 60)     /* a procura sozinha (ao abrir o menu): no maximo uma vez por dia */
+#define UPD_RETRY (60 * 60)          /* ...e, se o GitHub nao respondeu, de novo so depois de uma hora */
 
 static volatile int g_busy;
+static volatile int g_auto; /* a procura em andamento foi a automatica (so avisa se houver versao nova) */
 
 /* versao instalada (version.txt: "1.0.5"); vazio = build de desenvolvimento */
 static void local_version(char* out, size_t n) {
@@ -273,6 +279,13 @@ static int run_sh(const char* cmd) {
     return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
 }
 
+/* o resultado vai ao menu; na procura automatica, so o de versao nova (o resto fica so no log) */
+static void result(int code, const char* latest, const char* cur, const char* notes) {
+    if (!g_auto || code == MIYOO_UPD_NEWER) {
+        miyoo_menu_update_result(code, latest, cur, notes, g_auto);
+    }
+}
+
 static void* check_thread(void* arg) {
     static char js[65536];
     static char notes[16384];
@@ -285,7 +298,7 @@ static void* check_thread(void* arg) {
     local_version(cur, sizeof cur);
     if (!has_route()) {
         fprintf(stderr, "[atualizacao] sem rede (sem rota padrao)\n");
-        miyoo_menu_update_result(MIYOO_UPD_NO_NET, NULL, cur, NULL);
+        result(MIYOO_UPD_NO_NET, NULL, cur, NULL);
         g_busy = 0;
         return NULL;
     }
@@ -314,7 +327,7 @@ static void* check_thread(void* arg) {
         }
         err[strcspn(err, "\r\n")] = 0;
         fprintf(stderr, "[atualizacao] o pedido falhou: curl %d, http %s, %s\n", rc, code, err);
-        miyoo_menu_update_result(MIYOO_UPD_ERROR, NULL, cur, NULL);
+        result(MIYOO_UPD_ERROR, NULL, cur, NULL);
         g_busy = 0;
         return NULL;
     }
@@ -330,31 +343,67 @@ static void* check_thread(void* arg) {
     remove(UPD_ERR);
     if (!json_str(js, "tag_name", tag, sizeof tag) || tag[0] == 0) {
         fprintf(stderr, "[atualizacao] resposta sem versao (%u bytes)\n", (unsigned)n);
-        miyoo_menu_update_result(MIYOO_UPD_ERROR, NULL, cur, NULL);
+        result(MIYOO_UPD_ERROR, NULL, cur, NULL);
         g_busy = 0;
         return NULL;
+    }
+    f = fopen(UPD_STAMP, "w");
+    if (f != NULL) {
+        fprintf(f, "%ld\n", (long)time(NULL));
+        fclose(f);
     }
     notes[0] = 0;
     json_str(js, "body", notes, sizeof notes);
     md_clean(notes);
-    fprintf(stderr, "[atualizacao] instalada %s, no GitHub %s\n", cur[0] ? cur : "(sem version.txt)", tag);
+    fprintf(stderr, "[atualizacao] %sinstalada %s, no GitHub %s\n", g_auto ? "(procura automatica) " : "",
+            cur[0] ? cur : "(sem version.txt)", tag);
     if (cur[0] && ver_cmp(cur, tag) >= 0) {
-        miyoo_menu_update_result(MIYOO_UPD_LATEST, tag, cur, NULL);
+        result(MIYOO_UPD_LATEST, tag, cur, NULL);
     } else {
-        miyoo_menu_update_result(MIYOO_UPD_NEWER, tag, cur, notes);
+        result(MIYOO_UPD_NEWER, tag, cur, notes);
     }
     g_busy = 0;
     return NULL;
 }
 
-/* chamado pelo menu (A em "Procurar atualizacoes"); 0 = ja estava procurando */
-int port_update_check_start(void) {
+/* chamado pelo menu: automatic = 0, A em "Procurar atualizacoes"; 1, o menu acabou de abrir (procura no maximo uma vez
+ * por dia, e so se o Wi-Fi estiver ligado; se achar versao nova, so avisa e pede para usar a opcao do menu).
+ * 0 = nao comecou (ja estava procurando, ou a automatica nao era hora) */
+int port_update_check_start(int automatic) {
+    static time_t lastTry;
     pthread_t th;
     pthread_attr_t at;
     struct sched_param sp = { 0 };
+    const time_t now = time(NULL);
     if (g_busy) {
+        if (!automatic && g_auto) {
+            g_auto = 0; /* o jogador pediu enquanto a automatica rodava: o resultado dela vale como o do pedido */
+            return 1;
+        }
         return 0;
     }
+    if (automatic) {
+        FILE* f = fopen(UPD_STAMP, "r");
+        long last = 0;
+        if (f != NULL) {
+            if (fscanf(f, "%ld", &last) != 1) {
+                last = 0;
+            }
+            fclose(f);
+        }
+        /* (relogio que voltou para tras: procura de novo) */
+        if (last > 0 && now >= (time_t)last && now - (time_t)last < UPD_EVERY) {
+            return 0;
+        }
+        if (lastTry != 0 && now >= lastTry && now - lastTry < UPD_RETRY) {
+            return 0;
+        }
+        if (!has_route()) {
+            return 0; /* sem Wi-Fi: tenta de novo na proxima vez que o menu abrir */
+        }
+        lastTry = now;
+    }
+    g_auto = automatic;
     g_busy = 1;
     pthread_attr_init(&at);
     pthread_attr_setdetachstate(&at, PTHREAD_CREATE_DETACHED);
