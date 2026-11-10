@@ -11,7 +11,8 @@
  * quadros, com o desenho parado e nenhuma leitura da ROM em andamento; ao carregar, o som e acertado
  * (Port_SsAudioRestore em sequence.c). Salvar so durante o jogo (cena carregada, fora de troca de cena).
  *
- * ARQUIVOS (pasta saves/ do jogo):
+ * ARQUIVOS (pasta dos saves, savedir.c: Saves/CurrentProfile/saves/ZeldaOoT no OnionOS, entao cada perfil -- Modo
+ * Visitante, Kids Mode... -- tem os seus; ./saves fora dele):
  *   state_quick.oss   estado rapido (MENU+R2 salva, MENU+L2 carrega); gravado por uma thread separada (o
  *                     jogo nao espera o cartao) e guardado tambem na memoria (carregar na sessao e imediato)
  *   state_auto.oss    estado de quando o jogo fechou (MENU, desligar, bateria): o Game Switcher continua dele
@@ -46,6 +47,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "savedir.h"
+
 extern char __start_game_data[];
 extern char __stop_game_data[];
 extern char __start_game_bss[];
@@ -66,11 +69,13 @@ const char* miyoo_menu_eu(const char* en, int lg) __attribute__((weak)); /* em a
 void miyoo_restart(void) __attribute__((weak));                 /* port_main.c: abre o jogo de novo (nao volta) */
 extern volatile int miyoo_battery_exit __attribute__((weak));
 
-#define SAVE_DIR "saves"
-#define QUICK_STATE SAVE_DIR "/state_quick.oss"
-#define AUTO_STATE SAVE_DIR "/state_auto.oss"
-#define BOOT_RESUME SAVE_DIR "/resume_boot"
-#define LOADING_FLAG SAVE_DIR "/state_loading"
+/* a pasta dos saves e os arquivos nela (savedir.c: a do perfil do OnionOS, ou ./saves), acertados no port_ss_init antes de
+ * qualquer outro uso */
+static char g_saveDir[PORT_PATH_MAX] = "saves";
+static char g_quickState[PORT_PATH_MAX] = "saves/state_quick.oss";
+static char g_autoState[PORT_PATH_MAX] = "saves/state_auto.oss";
+static char g_bootResume[PORT_PATH_MAX] = "saves/resume_boot";
+static char g_loadingFlag[PORT_PATH_MAX] = "saves/state_loading";
 #define ONION_DIR "/mnt/SDCARD/.tmp_update"
 #define CMD_TO_RUN ONION_DIR "/cmd_to_run.sh"
 #define RUN_SWITCHER ONION_DIR "/.runGameSwitcher"
@@ -365,7 +370,7 @@ static int write_state(const char* path, const uint8_t* buf) {
             h.pages++;
         }
     }
-    mkdir(SAVE_DIR, 0777);
+    mkdir(g_saveDir, 0777);
     snprintf(tmp, sizeof tmp, "%s.tmp", path);
     f = fopen(tmp, "wb");
     if (f != NULL && fwrite(&h, sizeof h, 1, f) == 1 && fwrite(bm, 1, nbm, f) == nbm) {
@@ -396,7 +401,7 @@ static int write_state(const char* path, const uint8_t* buf) {
     }
     if (ok && rename(tmp, path) == 0) {
         fsync_path(path);
-        fsync_path(SAVE_DIR);
+        fsync_path(g_saveDir);
     } else {
         ok = 0;
         remove(tmp);
@@ -486,7 +491,7 @@ static void* writer_main(void* unused) {
             pthread_cond_wait(&g_c, &g_m);
         }
         g_writePending = 0;
-        write_state(QUICK_STATE, g_buf); /* (com o trinco: um novo estado espera este chegar ao cartao) */
+        write_state(g_quickState, g_buf); /* (com o trinco: um novo estado espera este chegar ao cartao) */
     }
     return NULL;
 }
@@ -854,10 +859,18 @@ void port_ss_init(const char* argv0) {
     char prev[32] = "";
     FILE* f;
     int boot, switcher;
+    char tmp[PORT_PATH_MAX + 8];
     g_onion = exists(ONION_DIR);
-    mkdir(SAVE_DIR, 0777);
-    remove(AUTO_STATE ".tmp");
-    remove(QUICK_STATE ".tmp");
+    snprintf(g_saveDir, sizeof g_saveDir, "%s", port_save_dir());
+    port_save_path(g_quickState, sizeof g_quickState, "state_quick.oss");
+    port_save_path(g_autoState, sizeof g_autoState, "state_auto.oss");
+    port_save_path(g_bootResume, sizeof g_bootResume, "resume_boot");
+    port_save_path(g_loadingFlag, sizeof g_loadingFlag, "state_loading");
+    mkdir(g_saveDir, 0777);
+    snprintf(tmp, sizeof tmp, "%s.tmp", g_autoState);
+    remove(tmp);
+    snprintf(tmp, sizeof tmp, "%s.tmp", g_quickState);
+    remove(tmp);
     if (!port_ss_available()) {
         fprintf(stderr, "[estado] secoes do jogo ausentes: estados desligados\n");
         return;
@@ -885,24 +898,24 @@ void port_ss_init(const char* argv0) {
         }
         fclose(f);
     }
-    if (exists(LOADING_FLAG)) {
+    if (exists(g_loadingFlag)) {
         fprintf(stderr, "[estado] a ultima retomada nao chegou a rodar (travou?): comecando do inicio\n");
-        remove(LOADING_FLAG);
-        remove(BOOT_RESUME);
+        remove(g_loadingFlag);
+        remove(g_bootResume);
         return;
     }
-    boot = exists(BOOT_RESUME);
+    boot = exists(g_bootResume);
     switcher = !strcmp(prev, "switcher") || !strcmp(prev, "game");
     if (boot || switcher) {
-        if (state_usable(AUTO_STATE)) {
+        if (state_usable(g_autoState)) {
             g_bootLoad = 1;
-        } else if (exists(AUTO_STATE)) {
-            fprintf(stderr, "[estado] %s e de outra versao do jogo: apagado\n", AUTO_STATE);
-            remove(AUTO_STATE);
+        } else if (exists(g_autoState)) {
+            fprintf(stderr, "[estado] %s e de outra versao do jogo: apagado\n", g_autoState);
+            remove(g_autoState);
         }
     }
     if (!g_bootLoad) {
-        remove(BOOT_RESUME);
+        remove(g_bootResume);
     }
     fprintf(stderr, "[estado] aberto por '%s'%s: %s\n", prev[0] ? prev : "?", boot ? " (desligou no jogo)" : "",
             g_bootLoad ? "continuando de onde parou" : "comecando do inicio");
@@ -952,20 +965,20 @@ static void exit_without_state(int kind) {
     }
     if (kind == EXIT_RESTART) { /* (fora do jogo: so abre de novo, do inicio) */
         if (!g_bootLoad) {
-            remove(AUTO_STATE);
-            remove(BOOT_RESUME);
+            remove(g_autoState);
+            remove(g_bootResume);
         }
         restart_now();
     }
     if (g_bootLoad) { /* a retomada nem aconteceu: o estado no cartao continua sendo o de continuar */
         if (off) {
-            touch(BOOT_RESUME);
+            touch(g_bootResume);
             put_back_cmd();
         }
         quit_now();
     }
-    remove(AUTO_STATE); /* o Game Switcher nao volta para um ponto antigo */
-    remove(BOOT_RESUME);
+    remove(g_autoState); /* o Game Switcher nao volta para um ponto antigo */
+    remove(g_bootResume);
     if (off) {
         put_back_cmd();
     }
@@ -1019,7 +1032,7 @@ int port_ss_want(int isPlay, int isSetup) {
     g_loopRunning = 1;
     g_frames++;
     if (g_loadedAt && g_frames - g_loadedAt >= LOADED_OK_FRAMES) {
-        remove(LOADING_FLAG); /* a retomada rodou: nao travou o jogo */
+        remove(g_loadingFlag); /* a retomada rodou: nao travou o jogo */
         g_loadedAt = 0;
     }
     /* desligar: o sinal ou o arquivo do OnionOS (um antigo, de antes do jogo, nao conta) */
@@ -1078,7 +1091,7 @@ void port_ss_defer(int op) {
         toast("Busy, try again", "Ocupado, tente de novo");
     } else if (op == OP_LOAD_AUTO) {
         g_bootLoad = 0;
-        remove(BOOT_RESUME);
+        remove(g_bootResume);
         fprintf(stderr, "[estado] a retomada nao achou um ponto seguro: comecando do inicio\n");
     }
     /* (OP_EXIT: port_ss_input_tick fecha sem estado depois de 5 s) */
@@ -1112,7 +1125,7 @@ int port_ss_save(uint16_t seqMain, uint16_t seqSub) {
 }
 
 static void slot_path(char* out, size_t n, int slot, const char* ext) {
-    snprintf(out, n, SAVE_DIR "/state_%02d.%s", slot + 1, ext);
+    snprintf(out, n, "%s/state_%02d.%s", g_saveDir, slot + 1, ext);
 }
 
 /* which: 0 o estado rapido (memoria ou arquivo), 1 state_auto.oss (retomada ao abrir), 2 o estado g_slot do menu.
@@ -1122,7 +1135,7 @@ int port_ss_load(int which, uint16_t* seqMain, uint16_t* seqSub) {
     double t0 = now_ms();
     g_waitOp = OP_NONE;
     if (which == 2) {
-        char path[64];
+        char path[PORT_PATH_MAX];
         uint8_t* b = NULL;
         size_t len;
         int r;
@@ -1155,26 +1168,26 @@ int port_ss_load(int which, uint16_t* seqMain, uint16_t* seqSub) {
         size_t len;
         int r;
         g_bootLoad = 0;
-        touch(LOADING_FLAG);
-        remove(BOOT_RESUME);
-        r = read_state(AUTO_STATE, &b, &len);
+        touch(g_loadingFlag);
+        remove(g_bootResume);
+        r = read_state(g_autoState, &b, &len);
         if (r != 1) {
-            remove(LOADING_FLAG);
-            fprintf(stderr, "[estado] %s nao carregado (%s)\n", AUTO_STATE, r == 0 ? "sem arquivo" : "outra versao ou estragado");
+            remove(g_loadingFlag);
+            fprintf(stderr, "[estado] %s nao carregado (%s)\n", g_autoState, r == 0 ? "sem arquivo" : "outra versao ou estragado");
             return -1;
         }
         restore(b);
         memcpy(&h, b, sizeof h);
         free(b);
         g_loadedAt = g_frames;
-        fprintf(stderr, "[estado] continuando de %s (%.0f ms)\n", AUTO_STATE, now_ms() - t0);
+        fprintf(stderr, "[estado] continuando de %s (%.0f ms)\n", g_autoState, now_ms() - t0);
     } else {
         port_ss_req = 0;
         pthread_mutex_lock(&g_m);
         if (g_buf == NULL) {
             uint8_t* b = NULL;
             size_t len;
-            int r = read_state(QUICK_STATE, &b, &len);
+            int r = read_state(g_quickState, &b, &len);
             if (r != 1) {
                 pthread_mutex_unlock(&g_m);
                 if (r == 0) {
@@ -1219,7 +1232,7 @@ void port_ss_slot_not_play(void) {
 
 /* 0 = vazio, 1 = ok (*when = hora em que foi salvo), -1 = de outra versao */
 int port_ss_slot_info(int slot, long* when) {
-    char path[64];
+    char path[PORT_PATH_MAX];
     struct stat st;
     slot_path(path, sizeof path, slot, "oss");
     if (stat(path, &st) != 0) {
@@ -1231,7 +1244,7 @@ int port_ss_slot_info(int slot, long* when) {
 
 /* a miniatura (256x192 RGB565) do estado slot; 1 = lida. As das versoes antigas (160x120) sao ampliadas. */
 int port_ss_slot_thumb(int slot, uint16_t* out) {
-    char path[64];
+    char path[PORT_PATH_MAX];
     FILE* f;
     long size;
     int ok = 0;
@@ -1263,7 +1276,7 @@ int port_ss_slot_thumb(int slot, uint16_t* out) {
 }
 
 int port_ss_save_slot(uint16_t seqMain, uint16_t seqSub) {
-    char path[64], msg[48];
+    char path[PORT_PATH_MAX], msg[48];
     uint8_t* b;
     size_t len;
     int ok = 0;
@@ -1322,24 +1335,24 @@ void port_ss_exit(uint16_t seqMain, uint16_t seqSub) {
     pthread_mutex_lock(&g_m); /* (espera um estado rapido que esteja sendo gravado) */
     b = snapshot(seqMain, seqSub, NULL, &len);
     if (b != NULL) {
-        ok = write_state(AUTO_STATE, b);
+        ok = write_state(g_autoState, b);
         free(b);
     }
     pthread_mutex_unlock(&g_m);
     if (ok) {
-        remove(LOADING_FLAG);
+        remove(g_loadingFlag);
     } else {
-        remove(AUTO_STATE);
+        remove(g_autoState);
     }
     if (kind == EXIT_RESTART) { /* abre de novo e continua deste estado */
         if (ok) {
-            touch(BOOT_RESUME);
+            touch(g_bootResume);
         }
         restart_now();
     }
     if (off) {
         if (ok) {
-            touch(BOOT_RESUME);
+            touch(g_bootResume);
         }
         put_back_cmd();
     }
