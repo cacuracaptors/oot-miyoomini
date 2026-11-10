@@ -12,7 +12,7 @@
 #
 # Precisa: ~/fallout-miyoo/oot-arm (build com oot_headless.map), a ROM americana 1.1 (em ~/fallout-miyoo/oot-i386 ou o
 # .zip na Area de Trabalho), ~/fallout-miyoo/oot-arm/texturas_hd.pak (copiado do aparelho) e
-# "Zelda - Ocarina of Time.png" na Area de Trabalho.
+# a imagem do atalho em dist/ (dist/Zelda - Ocarina of Time.png, no repositorio).
 VER=$1
 [ -n "$VER" ] || { echo "uso: sh tools/oot-release.sh VERSAO (ex.: 1.0.0)"; exit 1; }
 ROOT=${ROOT:-$HOME/fallout-miyoo}
@@ -26,7 +26,7 @@ rm -rf "$W" && mkdir -p "$W" || exit 1
 [ "$(cat "$OUT/link.status" 2>/dev/null)" = 0 ] || { echo "ERRO: compile antes (sh tools/oot-build.sh)"; exit 1; }
 [ -f "$OUT/oot_headless.map" ] || { echo "ERRO: falta $OUT/oot_headless.map (compile de novo com o oot-build.sh novo)"; exit 1; }
 [ -f "$OUT/texturas_hd.pak" ] || { echo "ERRO: falta $OUT/texturas_hd.pak (copie do aparelho)"; exit 1; }
-IMG="$DESK/Zelda - Ocarina of Time.png"
+IMG="$PORT/dist/Zelda - Ocarina of Time.png"
 [ -f "$IMG" ] || { echo "ERRO: falta $IMG"; exit 1; }
 
 echo "[1/5] executavel"
