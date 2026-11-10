@@ -203,7 +203,7 @@ int port_opt_lens_flare = 1;
 int port_opt_light_hit_marks = 1; /* marca de acerto recortada (z_eff_ss_hitmark.c, tools/oot-patch-soh.py) */ /* reflexo do sol na lente (z_kankyo.c, tools/oot-patch.py) */
 int port_opt_menu_theme = 1; /* cores do menu de opcoes (port/miyoo/menu_miyoo.c) */
 extern int port_opt_perf_trace; /* port/perf_trace.c */            /* port/gfx/gfx_hook.c: registro quadro a quadro no log */
-extern int gx_hr_max_opt, gx_hr_alvo, gx_hr_texto, gx_retro, gx_retro_forca; /* port/gfx/gfx_hires.c: resolucao maior (dinamica) */
+extern int gx_hr_max_opt, gx_hr_alvo, gx_hr_texto, gx_retro, gx_retro_forca, gx_retro_tv; /* port/gfx/gfx_hires.c: resolucao maior (dinamica) */
 int port_opt_nucleos_fixos = 1;  /* desenho no nucleo 0, auxiliar do desenho no 1 */
 int port_opt_clock = 1600;          /* MHz da CPU ao abrir o jogo (0 = o que o sistema deixar, 1200) */
 int port_opt_clock_guard = 1; /* 1 = se o clock da CPU cair sozinho durante o jogo, pede de novo (a cada 10 s) */
@@ -297,7 +297,7 @@ static const struct {
     { "Controls", "button_select_hold", "", &port_opt_btn[19],
       "SELECT held (see button_a_tap)" },
     { "Controls", "auto_jump", "", &port_opt_auto_jump,
-      "with a jump button (button_*): 1 = Link also jumps by himself when he runs off a ledge (like the original); 0 = no automatic jump: he falls off the ledge, and only the jump button jumps" },
+      "1 = Link jumps by himself when he runs off a ledge (like the original); 0 = no automatic jump: he falls off the ledge, and only the jump button jumps. The jump button is chosen in the button settings (button_*)" },
     { "Controls", "jump_strength", "", &port_opt_jump_strength,
       "manual jump: minimum jump strength x10 (56 = 5.6; higher = taller jump). The running jump uses the game's own value when it is stronger" },
     { "Controls", "ledge_grab", "", &port_opt_ledge_grab,
@@ -550,6 +550,8 @@ static const struct {
       "retro filter (CRT TV look): 1 = scanlines, 2 = scanlines and an RGB mask; 0 = off. The game is drawn at 320x240 like the N64 (max_resolution is not used) and every game line takes 2 screen lines, so the scanlines match the game's lines. Turning it on in the menu raises the brightness by 3 (scanlines) or 4 (scanlines and mask); turning it off brings back the brightness from before" },
     { "Graphics", "retro_filter_strength", "", &gx_retro_forca,
       "retro filter: how much the scanlines (and the mask) darken, in % (25 to 75; 50 = default)" },
+    { "Graphics", "retro_filter_tv", "", &gx_retro_tv,
+      "retro filter: 1 = rounded corners and slightly darker edges, like a CRT TV screen; 0 = square picture" },
     { "Graphics", "retro_filter_brightness_base", "", &port_opt_retro_brightness_base,
       "(set by the game) brightness from before the retro filter was turned on in the menu, restored when it is turned off; -1 = none" },
     { "Graphics", "resolution_target_ms", "resolucao_alvo", &gx_hr_alvo,
@@ -939,6 +941,7 @@ static const struct {
     { "max_resolution", 640 },
     { "retro_filter", 0 },
     { "retro_filter_strength", 50 },
+    { "retro_filter_tv", 1 },
     { "retro_filter_brightness_base", -1 },
     { "resolution_target_ms", 30 },
     { "brightness", 0 },

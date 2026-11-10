@@ -31,6 +31,7 @@ int gx_hr_max_opt = 640;   /* opcao resolucao: largura maxima (320 = como o jogo
  * as do jogo. retro_filter_strength: quanto as linhas escurecem (%) */
 int gx_retro = 0;
 int gx_retro_forca = 50;
+int gx_retro_tv = 1; /* opcao retro_filter_tv: cantos arredondados e bordas escurecidas de TV de tubo (video_miyoo.c) */
 int gx_hr_alvo = 30;       /* opcao resolucao_alvo: ms por desenho que a resolucao dinamica tenta nao passar */
 int gx_hr_fixo;            /* 1 = sempre o tamanho maximo (teste no PC) */
 int gx_hr_ctl2 = 2;        /* opcao controle_resolucao: 1 = como antes; 2 = previsao por pixel (gx_hr_pass_end) */

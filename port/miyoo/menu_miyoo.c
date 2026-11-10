@@ -240,6 +240,7 @@ static const Item k_items[] = {
     R(TAB_GFX, "brightness", "Brightness (gamma)", "Brilho (gamma)", 0, 10, 1),
     R(TAB_GFX, "retro_filter", "Retro filter", "Filtro retrô", 0, 2, 1),
     R(TAB_GFX, "retro_filter_strength", "Retro filter strength (%)", "Força do filtro retrô (%)", 25, 75, 5),
+    T(TAB_GFX, "retro_filter_tv", "Retro filter: TV screen", "Filtro retrô: tela de TV"),
     R(TAB_GFX, "max_resolution", "Maximum resolution (width)", "Resolução máxima (largura)", 320, 640, 32),
     R(TAB_GFX, "resolution_target_ms", "Dynamic resolution target (ms)", "Alvo da resolução dinâmica (ms)", 20, 40, 1),
     R(TAB_GFX, "dither", "Dithering", "Pontilhado de cor", 0, 2, 1),
@@ -513,7 +514,7 @@ static int item_locked(const Item* it) {
     if (is_action(it)) {
         return 0;
     }
-    return (!strcmp(it->name, "max_resolution") && gx_retro) || (!strcmp(it->name, "retro_filter_strength") && !gx_retro);
+    return (!strcmp(it->name, "max_resolution") && gx_retro) || ((!strcmp(it->name, "retro_filter_strength") || !strcmp(it->name, "retro_filter_tv")) && !gx_retro);
 }
 
 /* todas as opcoes do menu (e as de diagnostico) voltam aos valores de fabrica */

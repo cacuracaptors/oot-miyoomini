@@ -871,7 +871,7 @@ static void ge_draw(const void* key, int back, int imgW, int imgH) {
  * orientacao de quem olha e vai com o mesmo giro da imagem do jogo. */
 static MI_PHY rt_phys;
 static uint32_t* rt_virt;
-static int rt_mode = -1, rt_forca = -1;
+static int rt_mode = -1, rt_forca = -1, rt_tvb = -1;
 static int rt_mul = -1; /* -1 = falta o teste; 1 = multiplica; 0 = so a transparencia; -2 = sem memoria */
 static int rt_sop, rt_dop;
 
@@ -950,6 +950,10 @@ out:
 #define RT_STRIP 80
 static MI_PHY rs_phys;
 static uint32_t* rs_virt;
+/* com a tela de TV (opcao retro_filter_tv), na tela de 752x560: cada faixa e diferente, entao a camada inteira e montada
+ * ja girada (na ordem da pagina) e vai em faixas sem giro, como a de sempre */
+static MI_PHY rs_fullp;
+static uint32_t* rs_full;
 static int rt_strip; /* 1 = a camada e a faixa */
 
 static void rt_reserve(void) {
@@ -967,8 +971,37 @@ static void rt_reserve(void) {
     rs_virt = (uint32_t*)v;
 }
 
+/* tela de TV de tubo (opcao retro_filter_tv): quanto sobra do ponto (0..256), na orientacao de quem olha. A forma de
+ * uma tela de tubo (ajustada pixel a pixel ao contorno de uma foto de referencia, 11/2026): as quatro bordas curvas de
+ * ponta a ponta (cada lado abaulado, entrando 2,5% da largura nos cantos e 4,5% da altura em cima e embaixo), os
+ * cantos arredondados em "superelipse" (raio de 8% da altura, norma 4: mais cheios que um circulo), uma borda preta
+ * minima (1% da altura) e a imagem escurecendo perto da borda (ate 40% na borda, numa faixa de 13% da largura). Feito so quando a camada e montada: no desenho de cada quadro nao custa nada (a mesma camada). */
+static unsigned rt_frame(int tv, int x, int y) {
+    const float W = (float)PANEL_W, H = (float)PANEL_H, m = H * 0.01f, r = H * 0.08f, band = W * 0.13f;
+    const float u = fabsf(((float)x + 0.5f) / W * 2.0f - 1.0f), v = fabsf(((float)y + 0.5f) / H * 2.0f - 1.0f);
+    float dx, dy, qx, qy, ox, oy, d, t, f, cov;
+    if (!tv) {
+        return 256u;
+    }
+    dx = (1.0f - 0.025f * v * v - u) * W * 0.5f - m; /* pixels ate o lado curvo */
+    dy = (1.0f - 0.045f * u * u - v) * H * 0.5f - m; /* pixels ate a borda de cima/baixo curva */
+    qx = r - dx;
+    qy = r - dy;
+    ox = qx > 0.0f ? qx : 0.0f;
+    oy = qy > 0.0f ? qy : 0.0f;
+    d = r - sqrtf(sqrtf(ox * ox * ox * ox + oy * oy * oy * oy)) - (qx > qy ? (qx < 0.0f ? qx : 0.0f) : (qy < 0.0f ? qy : 0.0f));
+    cov = d + 0.5f;
+    if (cov <= 0.0f) {
+        return 0u;
+    }
+    cov = cov > 1.0f ? 1.0f : cov;
+    t = d < band ? 1.0f - d / band : 0.0f;
+    f = cov * (1.0f - 0.4f * t * t);
+    return (unsigned)(f * 256.0f + 0.5f);
+}
+
 /* um ponto da camada; x, y na orientacao de quem olha (a linha 2j e a do jogo, a 2j+1 a escura) */
-static uint32_t rt_px(int mode, int x, int y, unsigned line, unsigned mk) {
+static uint32_t rt_px(int mode, int x, int y, unsigned line, unsigned mk, unsigned fr) {
     const unsigned l = (y & 1) ? line : 255u;
     unsigned c[3] = { l, l, l };
     if (mode == 2) {
@@ -979,6 +1012,11 @@ static uint32_t rt_px(int mode, int x, int y, unsigned line, unsigned mk) {
             }
         }
     }
+    if (fr < 256u) {
+        c[0] = c[0] * fr >> 8;
+        c[1] = c[1] * fr >> 8;
+        c[2] = c[2] * fr >> 8;
+    }
     if (rt_mul == 1) {
         return 0xFF000000u | (c[0] << 16) | (c[1] << 8) | c[2];
     }
@@ -986,7 +1024,22 @@ static uint32_t rt_px(int mode, int x, int y, unsigned line, unsigned mk) {
     return (uint32_t)(255u - (c[0] + c[1] + c[2]) / 3u) << 24;
 }
 
-static int rt_build(int mode, int forca) {
+/* uma faixa da pagina que comeca na linha dy da pagina (a pagina e girada 180: linha r e coluna c da pagina = linha
+ * PANEL_H-1-r e coluna PANEL_W-1-c de quem olha) */
+static void rt_build_strip(uint32_t* buf, int dy, int mode, unsigned line, unsigned mk, int tv) {
+    int x, y;
+    for (y = 0; y < RT_STRIP; y++) {
+        uint32_t* row = buf + (size_t)y * PANEL_W;
+        const int vy = PANEL_H - 1 - (dy + y);
+        for (x = 0; x < PANEL_W; x++) {
+            const int vx = PANEL_W - 1 - x;
+            row[x] = rt_px(mode, vx, vy, line, mk, rt_frame(tv, vx, vy));
+        }
+    }
+    mi.Flush(buf, (MI_U32)(PANEL_W * RT_STRIP * 4));
+}
+
+static int rt_build(int mode, int forca, int tv) {
     const size_t n = (size_t)PANEL_W * PANEL_H;
     int x, y;
     unsigned line, mk;
@@ -1017,32 +1070,44 @@ static int rt_build(int mode, int forca) {
     line = 255u - 255u * (unsigned)forca / 100u;      /* linha escura */
     mk = 255u - 255u * (unsigned)forca / 200u;        /* mascara: os 2 canais que nao sao o da coluna */
     if (rt_strip) {
-        /* linha r e coluna c da pagina = linha PANEL_H-1-r e coluna PANEL_W-1-c de quem olha (a pagina e girada 180; com
-         * RT_STRIP par, cada faixa da pagina tem as mesmas linhas pares e impares) */
-        for (y = 0; y < RT_STRIP; y++) {
-            uint32_t* row = rs_virt + (size_t)y * PANEL_W;
-            for (x = 0; x < PANEL_W; x++) {
-                row[x] = rt_px(mode, PANEL_W - 1 - x, PANEL_H - 1 - y, line, mk);
+        /* com RT_STRIP par, cada faixa da pagina tem as mesmas linhas pares e impares; a do meio vale para todas as faixas
+         * do meio (a borda escurecida de cima e de baixo cabe numa faixa) */
+        rt_build_strip(rs_virt, RT_STRIP, mode, line, mk, 0);
+        if (tv && rs_full == NULL) {
+            void* v = NULL;
+            const MI_U32 bytes = (MI_U32)(n * 4);
+            if (mi.MmaAlloc(NULL, bytes, &rs_fullp) == 0 && mi.Mmap(rs_fullp, bytes, &v, TRUE) == 0) {
+                rs_full = (uint32_t*)v;
+            } else {
+                if (rs_fullp) {
+                    mi.MmaFree(rs_fullp);
+                }
+                rs_fullp = 0;
+                fprintf(stderr, "video: filtro retro: sem memoria para a tela de TV (fica sem ela)\n");
             }
         }
-        mi.Flush(rs_virt, (MI_U32)(PANEL_W * RT_STRIP * 4));
+        if (tv && rs_full != NULL) {
+            for (y = 0; y < PANEL_H; y += RT_STRIP) {
+                rt_build_strip(rs_full + (size_t)y * PANEL_W, y, mode, line, mk, tv);
+            }
+        }
     } else {
         for (y = 0; y < PANEL_H; y++) {
             uint32_t* row = rt_virt + (size_t)y * PANEL_W;
             for (x = 0; x < PANEL_W; x++) {
-                row[x] = rt_px(mode, x, y, line, mk);
+                row[x] = rt_px(mode, x, y, line, mk, rt_frame(tv, x, y));
             }
         }
         mi.Flush(rt_virt, (MI_U32)(n * 4));
     }
-    fprintf(stderr, "video: filtro retro %s, forca %d%% (%s)\n", mode == 2 ? "linhas e mascara" : "linhas", forca,
-            rt_mul == 1 ? "multiplicando as cores" : "so escurecendo");
+    fprintf(stderr, "video: filtro retro %s, forca %d%%%s (%s)\n", mode == 2 ? "linhas e mascara" : "linhas", forca,
+            tv ? ", cantos de TV" : "", rt_mul == 1 ? "multiplicando as cores" : "so escurecendo");
     return 1;
 }
 
 /* a faixa por cima das linhas dy..dy+RT_STRIP-1 da pagina */
-static int rt_blit_strip(MI_PHY dst, int dy, int sop, int dop, MI_U16* fence) {
-    MI_GFX_Surface_t s = { rs_phys, E_MI_GFX_FMT_ARGB8888, (MI_U32)PANEL_W, (MI_U32)RT_STRIP, (MI_U32)PANEL_W * 4 };
+static int rt_blit_strip(MI_PHY src, MI_PHY dst, int dy, int sop, int dop, MI_U16* fence) {
+    MI_GFX_Surface_t s = { src, E_MI_GFX_FMT_ARGB8888, (MI_U32)PANEL_W, (MI_U32)RT_STRIP, (MI_U32)PANEL_W * 4 };
     MI_GFX_Surface_t d = { dst, E_MI_GFX_FMT_ARGB8888, (MI_U32)PANEL_W, (MI_U32)PANEL_H, (MI_U32)PANEL_W * 4 };
     MI_GFX_Rect_t sr = { 0, 0, (MI_U32)PANEL_W, (MI_U32)RT_STRIP }, dr = { 0, dy, (MI_U32)PANEL_W, (MI_U32)RT_STRIP };
     MI_GFX_Opt_t opt;
@@ -1061,8 +1126,8 @@ static int rt_blit_strip(MI_PHY dst, int dy, int sop, int dop, MI_U16* fence) {
 }
 
 static void rt_draw(int back) {
-    extern int gx_retro, gx_retro_forca; /* gfx_hires.c */
-    const int mode = gx_retro;
+    extern int gx_retro, gx_retro_forca, gx_retro_tv; /* gfx_hires.c */
+    const int mode = gx_retro, tv = gx_retro_tv != 0;
     const MI_PHY page = (MI_PHY)fb_phys + (MI_PHY)back * PANEL_W * PANEL_H * 4;
     MI_U16 fence = 0;
     int sop, dop;
@@ -1072,21 +1137,23 @@ static void rt_draw(int back) {
     if (rt_mul == -1) {
         rt_mul = rt_test();
     }
-    if (mode != rt_mode || gx_retro_forca != rt_forca) {
-        if (!rt_build(mode, gx_retro_forca)) {
+    if (mode != rt_mode || gx_retro_forca != rt_forca || tv != rt_tvb) {
+        if (!rt_build(mode, gx_retro_forca, tv)) {
             fprintf(stderr, "video: filtro retro sem memoria\n");
             rt_mul = -2;
             return;
         }
         rt_mode = mode;
         rt_forca = gx_retro_forca;
+        rt_tvb = tv;
     }
     sop = rt_mul == 1 ? rt_sop : E_MI_GFX_DFB_BLD_ONE;
     dop = rt_mul == 1 ? rt_dop : E_MI_GFX_DFB_BLD_INVSRCALPHA;
     if (rt_strip) {
         int y, sent = 0;
         for (y = 0; y < PANEL_H; y += RT_STRIP) {
-            sent += rt_blit_strip(page, y, sop, dop, &fence) == 0;
+            const MI_PHY src = tv && rs_full != NULL ? rs_fullp + (MI_PHY)y * PANEL_W * 4 : rs_phys;
+            sent += rt_blit_strip(src, page, y, sop, dop, &fence) == 0;
         }
         if (sent) {
             mi.Wait(TRUE, fence);
@@ -2219,6 +2286,15 @@ static void release_mma(void) {
         mi.MmaFree(rt_phys);
         rt_virt = NULL;
         rt_phys = 0;
+        rt_mode = -1;
+        kb += (PANEL_W * PANEL_H * 4) >> 10;
+        n++;
+    }
+    if (rs_full != NULL) {
+        mi.Munmap(rs_full, (MI_U32)(PANEL_W * PANEL_H * 4));
+        mi.MmaFree(rs_fullp);
+        rs_full = NULL;
+        rs_fullp = 0;
         rt_mode = -1;
         kb += (PANEL_W * PANEL_H * 4) >> 10;
         n++;
