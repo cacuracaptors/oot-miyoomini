@@ -53,6 +53,15 @@ void miyoo_menu_slots_changed(void);
 enum { MIYOO_UPD_LATEST, MIYOO_UPD_NEWER, MIYOO_UPD_NO_NET, MIYOO_UPD_ERROR };
 void miyoo_menu_update_result(int code, const char* latest, const char* cur, const char* notes, int automatic);
 int port_update_check_start(int automatic);
+enum { MIYOO_UPST_IDLE, MIYOO_UPST_DOWNLOADING, MIYOO_UPST_PREPARING, MIYOO_UPST_READY, MIYOO_UPST_FAILED };
+enum { MIYOO_UPERR_NONE, MIYOO_UPERR_NET, MIYOO_UPERR_SPACE, MIYOO_UPERR_DOWNLOAD, MIYOO_UPERR_VERIFY, MIYOO_UPERR_MEMORY,
+       MIYOO_UPERR_EXTRACT, MIYOO_UPERR_NEEDROM, MIYOO_UPERR_INSTALL };
+int port_update_download_start(void);
+void port_update_cancel(void);
+int port_update_has_package(void);
+int port_update_state(long* got, long* total, int* err, int* needRom, int* hasRom);
+void port_update_forget_error(void);
+int port_update_install(void);
 int miyoo_menu_active(void);
 int miyoo_menu_dirty(void);
 void miyoo_menu_open(void);

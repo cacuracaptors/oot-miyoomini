@@ -495,6 +495,9 @@ static char g_updTitle[128];
 static char g_updText[16384];
 static char g_updLines[UPD_MAXL][256];
 static int g_updN, g_updTop, g_updWrapped;
+static char g_updTag[64];
+static int g_updChoice; /* janela de instalar: 0 = salvar o jogo antes (o padrao: um A apressado nao instala), 1 = instalar */
+/* g_upd: 0 = sem janela; 1 = "What's new"; 2 = baixando (barra de progresso); 3 = pronta: salvar antes ou instalar */
 static volatile int g_open;
 static const char* tr(const char* en, const char* pt);
 
@@ -518,11 +521,22 @@ void miyoo_menu_update_result(int code, const char* latest, const char* cur, con
                      tr("you have", "você tem"), cur[0] == 'v' || cur[0] == 'V' ? cur + 1 : cur);
         }
         snprintf(g_updText, sizeof g_updText, "%s", notes != NULL ? notes : "");
+        snprintf(g_updTag, sizeof g_updTag, "%s", latest);
         g_updTop = 0;
         g_updWrapped = 0;
         g_status[0] = 0;
         if (g_open) {
-            g_upd = 1;
+            long got, total;
+            int err, needRom, hasRom;
+            const int st = port_update_state(&got, &total, &err, &needRom, &hasRom);
+            if (st == MIYOO_UPST_READY) {
+                g_upd = 3; /* (ja baixada: o jogador tinha escolhido salvar antes) */
+                g_updChoice = 0;
+            } else if (st == MIYOO_UPST_DOWNLOADING || st == MIYOO_UPST_PREPARING) {
+                g_upd = 2;
+            } else {
+                g_upd = 1;
+            }
         } else {
             status_ms(g_updTitle, 8000.0);
         }
@@ -679,6 +693,14 @@ void miyoo_menu_open(void) {
         }
         g_confirm = 0;
         g_upd = 0;
+        {
+            long got, total;
+            int err, needRom, hasRom;
+            const int st = port_update_state(&got, &total, &err, &needRom, &hasRom);
+            if (st == MIYOO_UPST_DOWNLOADING || st == MIYOO_UPST_PREPARING) {
+                g_upd = 2; /* (o menu foi fechado no meio do download: continua mostrando) */
+            }
+        }
         miyoo_rumble_off();
         g_slotsDirty = 1;
         g_saveArmed = -1;
@@ -820,21 +842,100 @@ static void change(const Item* it, int dir) {
     }
 }
 
+/* o aviso de um erro do download ou da instalacao (update_miyoo.c, MIYOO_UPERR_*) */
+static const char* upd_err_text(int err) {
+    switch (err) {
+        case MIYOO_UPERR_NET: return tr("No internet: turn on Wi-Fi in OnionOS", "Sem internet: ligue o Wi-Fi no OnionOS");
+        case MIYOO_UPERR_SPACE: return tr("Not enough free space on the SD card", "Falta espaço livre no cartão SD");
+        case MIYOO_UPERR_DOWNLOAD: return tr("The download failed: try again", "O download falhou: tente de novo");
+        case MIYOO_UPERR_VERIFY: return tr("The download came damaged: try again", "O download veio com defeito: tente de novo");
+        case MIYOO_UPERR_MEMORY: return tr("Not enough free memory to open the update", "Falta memória livre para abrir a atualização");
+        case MIYOO_UPERR_EXTRACT: return tr("Could not open the update", "Não foi possível abrir a atualização");
+        case MIYOO_UPERR_INSTALL:
+            return tr("The install failed: copy the zip files by hand", "A instalação falhou: copie os arquivos do zip à mão");
+        default: return tr("Could not check for updates", "Não foi possível procurar atualizações");
+    }
+}
+
+/* a janela de atualizacao acompanha o download (chamado a cada quadro com ela aberta) */
+static void upd_poll(void) {
+    long got, total;
+    int err, needRom, hasRom;
+    const int st = port_update_state(&got, &total, &err, &needRom, &hasRom);
+    if (g_upd == 2) {
+        if (st == MIYOO_UPST_READY) {
+            g_upd = 3;
+            g_updChoice = 0;
+            g_dirty = 1;
+        } else if (st == MIYOO_UPST_FAILED) {
+            g_upd = 0;
+            status_ms(upd_err_text(err), 10000.0);
+            port_update_forget_error();
+        } else if (st == MIYOO_UPST_IDLE) {
+            g_upd = 0; /* (cancelado) */
+            g_dirty = 1;
+        }
+    }
+}
+
 /* botoes (input_miyoo.c), ja com a repeticao de quem segura: MENU_K_* */
 void miyoo_menu_key(int k) {
     int first, n = tab_count(g_tab, &first);
     g_selAt = miyoo_now_ms(); /* (nome comprido e descricao comecam a rolar de novo) */
     int* sel = &g_sel[g_tab];
     const Item* it;
-    if (g_upd) {
-        /* janela "What's new": cima/baixo rolam o texto, B (ou A) fecha */
-        const int vis = 11;
+    if (g_upd == 1) {
+        /* janela "What's new": cima/baixo rolam o texto, A baixa e instala, B fecha */
+        const int vis = 10;
         if (k == MENU_K_UP && g_updTop > 0) {
             g_updTop--;
         } else if (k == MENU_K_DOWN && g_updTop + vis < g_updN) {
             g_updTop++;
+        } else if (k == MENU_K_A && port_update_has_package()) {
+            if (port_update_download_start()) {
+                g_upd = 2;
+            }
         } else if (k == MENU_K_CLOSE || k == MENU_K_A) {
             g_upd = 0;
+        }
+        g_dirty = 1;
+        return;
+    }
+    if (g_upd == 2) {
+        /* baixando: B cancela */
+        if (k == MENU_K_CLOSE) {
+            port_update_cancel();
+            status_ms(tr("Download canceled", "Download cancelado"), 5000.0);
+        }
+        g_dirty = 1;
+        return;
+    }
+    if (g_upd == 3) {
+        /* pronta: salvar o jogo antes (o padrao) ou instalar e reiniciar */
+        long got, total;
+        int err, needRom, hasRom;
+        port_update_state(&got, &total, &err, &needRom, &hasRom);
+        if (needRom && !hasRom) {
+            if (k == MENU_K_CLOSE || k == MENU_K_A) {
+                g_upd = 0; /* (sem a ROM nao instala: a janela so explica) */
+            }
+        } else if (k == MENU_K_UP || k == MENU_K_DOWN) {
+            g_updChoice = !g_updChoice;
+        } else if (k == MENU_K_CLOSE || (k == MENU_K_A && g_updChoice == 0)) {
+            g_upd = 0;
+            status_ms(tr("Save in the pause menu (START), then choose Check for updates again",
+                         "Salve no menu de pausa (START) e escolha Procurar atualizações de novo"),
+                      15000.0);
+        } else if (k == MENU_K_A) {
+            const int r = port_update_install();
+            g_upd = 0;
+            if (r == 0) {
+                close_menu(0);
+                miyoo_menu_status(tr("Update installed: restarting...", "Atualização instalada: reiniciando..."));
+                port_ss_reset_request();
+            } else {
+                status_ms(upd_err_text(r), 15000.0);
+            }
         }
         g_dirty = 1;
         return;
@@ -1748,9 +1849,100 @@ void miyoo_menu_render(uint32_t* page) {
     rrect(10, HELP_Y, W - 20, HELP_H, 14, TH(help), TH(helpA));
     draw_tabs();
 
+    if (g_upd == 2 || g_upd == 3) {
+        const int x0 = 24, y0 = g_upd == 3 ? 20 : 60, bw = W - 48, bh = g_upd == 3 ? 440 : 360;
+        long got, total;
+        int err, needRom, hasRom, j;
+        const int st = port_update_state(&got, &total, &err, &needRom, &hasRom);
+        upd_poll();
+        rect_a(0, 0, W, H, 0x000000u, 90);
+        shadow(x0, y0, bw, bh, 18);
+        rrect(x0, y0, bw, bh, 18, TH(card), 255);
+        if (g_upd == 2) {
+            /* a barra de progresso */
+            const int bx = x0 + 24, by = y0 + 120, bwid = bw - 48;
+            const int pct = total > 0 ? (int)(got * 100 / total) : 0;
+            g_anim = 1;
+            snprintf(buf, sizeof buf, "%s %s", st == MIYOO_UPST_PREPARING ? tr("Preparing", "Preparando") : tr("Downloading", "Baixando"),
+                     g_updTag);
+            big(x0 + 24, y0 + 30, buf, TH(accent));
+            rrect(bx, by, bwid, 26, 13, TH(track), 255);
+            if (pct > 0) {
+                const int fw = bwid * (pct > 100 ? 100 : pct) / 100;
+                rrect(bx, by, fw < 26 ? 26 : fw, 26, 13, TH(accent), 255);
+            }
+            if (st == MIYOO_UPST_PREPARING) {
+                big(x0 + 24, by + 50, tr("Checking and opening the files...", "Conferindo e abrindo os arquivos..."), TH(text));
+            } else {
+                snprintf(buf, sizeof buf, "%.1f / %.1f MB  (%d%%)", got / 1048576.0, total / 1048576.0, pct);
+                big(x0 + 24, by + 50, buf, TH(text));
+            }
+            big(x0 + 24, y0 + bh - 46,
+                st == MIYOO_UPST_PREPARING ? tr("Please wait", "Aguarde") : tr("B: cancel", "B: cancela"), TH(dim));
+            return;
+        }
+        {
+            /* pronta para instalar */
+            extern int port_opt_autosave; /* (port_options.c: minutos; 0 = desligado) */
+            static char lines[HELP_MAXL][256];
+            static char para[1024];
+            int m, y;
+            snprintf(buf, sizeof buf, "%s %s", g_updTag, tr("is ready to install", "está pronta para instalar"));
+            big(x0 + 24, y0 + 20, buf, TH(accent));
+            if (needRom && !hasRom) {
+                snprintf(para, sizeof para, "%s",
+                         tr("This version needs the ROM again (it rebuilds the game data). Copy the ROM (USA 1.1) to the "
+                            "game folder, then choose Check for updates again.",
+                            "Esta versão precisa da ROM de novo (ela refaz os dados do jogo). Copie a ROM (USA 1.1) para a "
+                            "pasta do jogo e escolha Procurar atualizações de novo."));
+                y = y0 + 62;
+            } else {
+                /* em destaque: os estados salvos (rapidos e o do Game Switcher) nao passam para a versao nova; so o
+                 * save do proprio jogo (savestate.c confere a versao de cada estado) */
+                m = help_split(tr("Save states (quick saves and the Game Switcher) don't carry over to the new version. "
+                                  "Save the game in the pause menu before installing.",
+                                  "Os estados salvos (os rápidos e o do Game Switcher) não passam para a versão nova. "
+                                  "Salve o jogo no menu de pausa antes de instalar."),
+                               bw - 80, lines);
+                rrect(x0 + 24, y0 + 58, bw - 48, m * 26 + 16, 12, TH(warn), 255);
+                for (j = 0; j < m && j < 4; j++) {
+                    big(x0 + 40, y0 + 66 + j * 26, lines[j], 0x201000u);
+                }
+                y = y0 + 58 + m * 26 + 16 + 12;
+                snprintf(para, sizeof para, "%s%s%s",
+                         port_opt_autosave > 0 ? tr("Autosave is on: the game also saves by itself before restarting.",
+                                                    "O salvamento automático está ligado: o jogo também salva sozinho "
+                                                    "antes de reiniciar.")
+                                               : "",
+                         port_opt_autosave > 0 && needRom ? " " : "",
+                         needRom ? tr("The first start rebuilds the game data from the ROM and takes a few minutes.",
+                                      "A primeira abertura refaz os dados do jogo com a ROM e leva alguns minutos.")
+                                 : "");
+            }
+            m = help_split(para, bw - 48, lines);
+            for (j = 0; j < m && j < 5; j++, y += 26) {
+                big(x0 + 24, y, lines[j], TH(text));
+            }
+            if (needRom && !hasRom) {
+                big(x0 + 24, y0 + bh - 46, tr("B: close", "B: fecha"), TH(dim));
+                return;
+            }
+            y = y0 + bh - 140;
+            for (j = 0; j < 2; j++, y += 44) {
+                const int on = g_updChoice == j;
+                rrect(x0 + 24, y, bw - 48, 36, 18, on ? TH(accent) : TH(track), 255);
+                big(x0 + 44, y + 5,
+                    j == 0 ? tr("Save the game first", "Salvar o jogo antes") : tr("Install and restart (title screen)", "Instalar e reiniciar (tela de título)"),
+                    on ? 0xFFFFFFu : TH(text));
+            }
+            big(x0 + 24, y0 + bh - 46, tr("Up/Down: choose   A: confirm   B: close", "Cima/baixo: escolhe   A: confirma   B: fecha"),
+                TH(dim));
+        }
+        return;
+    }
     if (g_upd) {
         /* "What's new": a versao nova e o texto do release */
-        const int x0 = 24, y0 = 40, bw = W - 48, bh = 400, vis = 11, lh = 26;
+        const int x0 = 24, y0 = 40, bw = W - 48, bh = 400, vis = 10, lh = 26;
         int j;
         rect_a(0, 0, W, H, 0x000000u, 90);
         shadow(x0, y0, bw, bh, 18);
@@ -1794,7 +1986,9 @@ void miyoo_menu_render(uint32_t* page) {
             chevron(x0 + bw - 24, y0 + 56 + vis * lh - 10, 6, 3, TH(accent));
         }
         big(x0 + 24, y0 + bh - 36,
-            tr("Up/Down: scroll   B: close", "Cima/baixo: rola   B: fecha"),
+            port_update_has_package() ? tr("Up/Down: scroll   A: download and install   B: close",
+                                           "Cima/baixo: rola   A: baixa e instala   B: fecha")
+                                      : tr("Up/Down: scroll   B: close", "Cima/baixo: rola   B: fecha"),
             TH(dim));
         return;
     }

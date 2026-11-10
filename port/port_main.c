@@ -503,6 +503,8 @@ void miyoo_quit(int code) {
 /* menu de opcoes: reinicia o jogo para valer uma opcao que so e lida ao abrir (o estado ja foi salvo; o jogo continua
  * dele). O mesmo programa, com os mesmos argumentos, no lugar deste (o OnionOS nem percebe). */
 static char** g_argv;
+static char g_exePath[512]; /* o caminho do programa, lido ao abrir (depois de uma atualizacao, /proc/self/exe aponta
+                             * para o programa antigo, que foi trocado: update_miyoo.c) */
 
 void miyoo_restart(void) {
     pt_dump();
@@ -530,6 +532,15 @@ void miyoo_restart(void) {
             pthread_setschedparam(pthread_self(), SCHED_OTHER, &sp);
             setpriority(PRIO_PROCESS, (id_t)syscall(SYS_gettid), 0);
             syscall(SYS_sched_setaffinity, 0, sizeof all, &all);
+        }
+        {
+            extern int port_update_installed __attribute__((weak));
+            if (&port_update_installed != NULL && port_update_installed && g_exePath[0]) {
+                fprintf(stderr, "abrindo a versao nova: %s\n", g_exePath);
+                fflush(stderr);
+                execv(g_exePath, g_argv);
+                perror("execv (versao nova)");
+            }
         }
         execv("/proc/self/exe", g_argv);
         perror("execv");
@@ -621,6 +632,10 @@ int main(int argc, char** argv) {
     sram = "saves/oot.sav";
     mkdir("saves", 0755);
     g_argv = argv;
+    {
+        const ssize_t n = readlink("/proc/self/exe", g_exePath, sizeof g_exePath - 1);
+        g_exePath[n > 0 ? n : 0] = 0;
+    }
 #endif
     for (i = 1; i < argc; i++) {
         if (argv[i][0] == 0) {

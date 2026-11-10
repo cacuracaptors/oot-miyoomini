@@ -6,6 +6,14 @@
  * instalacao vem nas proximas etapas. Lote 224: ao abrir o menu, procura sozinha uma vez por dia e, se houver versao
  * nova, so avisa (a janela "What's new" fica para quando o jogador escolhe a opcao).
  *
+ * Etapas 2 e 3 (lote 225): baixar e instalar. O zip do release (o mesmo da pagina do GitHub) e baixado para .update/
+ * na pasta do jogo (no cartao SD, nao na memoria), conferido (tamanho e sha256 que o GitHub da) e aberto em .update/x
+ * pelo 7z do OnionOS. Depois o jogador escolhe: salvar o jogo antes (o padrao) ou instalar e reiniciar. Instalar e
+ * trocar os arquivos pelo nome (rename, no mesmo cartao: o programa que esta rodando continua inteiro na memoria, e o
+ * atalho .port que o OnionOS esta rodando tambem) e abrir o jogo de novo do comeco (os estados salvos de outra versao
+ * nao valem: savestate.c ja confere). Se a versao nova muda o cartucho (oot_swapmap.bin), o jogo novo refaz o
+ * cartucho a partir da ROM: so instala se a ROM estiver na pasta.
+ *
  * A rede: o OnionOS, ao abrir um jogo, desliga so os servidores (SSH, FTP, Samba...), nao o Wi-Fi. O pedido vai pelo
  * curl do proprio OnionOS (o mesmo do atualizador dele), com a conexao HTTPS conferida pela lista de certificados que
  * vai com o port (cacert.pem, da Mozilla); o OnionOS conecta sem conferir (-k), e aqui nao, porque o que vem do GitHub
@@ -19,11 +27,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dirent.h>
+#include <errno.h>
+#include <signal.h>
+#include <stdint.h>
+#include <strings.h>
+#include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
 #include "miyoo.h"
+
+int cart_is_valid(const char* path, const char* swapmap_path); /* port/cart_build.c */
 
 extern char** environ;
 
@@ -34,9 +51,28 @@ extern char** environ;
 #define UPD_STAMP "update_check.txt" /* (na pasta do jogo) quando foi a ultima procura que o GitHub respondeu */
 #define UPD_EVERY (24 * 60 * 60)     /* a procura sozinha (ao abrir o menu): no maximo uma vez por dia */
 #define UPD_RETRY (60 * 60)          /* ...e, se o GitHub nao respondeu, de novo so depois de uma hora */
+#define UPD_DIR ".update"
+#define UPD_ZIP UPD_DIR "/upd.zip"
+#define UPD_X UPD_DIR "/x"
+#define UPD_READY UPD_DIR "/ready.txt"
+#define UPD_PORTS UPD_X "/Roms/PORTS"
+#define UPD_GAME UPD_PORTS "/Games/ZeldaOoT"
+#define ONION_BIN "/mnt/SDCARD/.tmp_update/bin/"
+#define ONION_LIB "LD_LIBRARY_PATH=/mnt/SDCARD/.tmp_update/lib:$LD_LIBRARY_PATH "
 
 static volatile int g_busy;
 static volatile int g_auto; /* a procura em andamento foi a automatica (so avisa se houver versao nova) */
+
+/* o pacote do release achado na ultima procura (o zip ZeldaOoT-miyoomini-vX.zip) */
+static char g_tag[64];
+static char g_url[512];
+static char g_sha[72]; /* (64 hex; vazio = o GitHub nao deu) */
+static long g_size;
+
+/* download e instalacao (lido pelo menu a cada quadro) */
+static volatile int g_st = MIYOO_UPST_IDLE, g_err, g_cancel, g_needRom, g_hasRom;
+static volatile long g_got;
+int port_update_installed; /* port_main.c: reiniciar abre o arquivo novo, nao o que estava rodando */
 
 /* versao instalada (version.txt: "1.0.5"); vazio = build de desenvolvimento */
 static void local_version(char* out, size_t n) {
@@ -258,6 +294,109 @@ static void md_clean(char* s) {
     *w = 0;
 }
 
+/* ---- sha256 (para conferir o zip com o que o GitHub diz) ---- */
+typedef struct {
+    uint32_t h[8];
+    uint8_t b[64];
+    uint64_t n;
+    int k;
+} Sha;
+
+static const uint32_t k_sha[64] = {
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01,
+    0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+    0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+    0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08,
+    0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+};
+
+#define ROR(x, r) (((x) >> (r)) | ((x) << (32 - (r))))
+
+static void sha_block(Sha* c) {
+    uint32_t w[64], a, b, d, e, f, g, h, cc, t1, t2;
+    int i;
+    for (i = 0; i < 16; i++) {
+        w[i] = (uint32_t)c->b[i * 4] << 24 | (uint32_t)c->b[i * 4 + 1] << 16 | (uint32_t)c->b[i * 4 + 2] << 8 | c->b[i * 4 + 3];
+    }
+    for (i = 16; i < 64; i++) {
+        const uint32_t s0 = ROR(w[i - 15], 7) ^ ROR(w[i - 15], 18) ^ (w[i - 15] >> 3);
+        const uint32_t s1 = ROR(w[i - 2], 17) ^ ROR(w[i - 2], 19) ^ (w[i - 2] >> 10);
+        w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+    }
+    a = c->h[0], b = c->h[1], cc = c->h[2], d = c->h[3], e = c->h[4], f = c->h[5], g = c->h[6], h = c->h[7];
+    for (i = 0; i < 64; i++) {
+        t1 = h + (ROR(e, 6) ^ ROR(e, 11) ^ ROR(e, 25)) + ((e & f) ^ (~e & g)) + k_sha[i] + w[i];
+        t2 = (ROR(a, 2) ^ ROR(a, 13) ^ ROR(a, 22)) + ((a & b) ^ (a & cc) ^ (b & cc));
+        h = g, g = f, f = e, e = d + t1, d = cc, cc = b, b = a, a = t1 + t2;
+    }
+    c->h[0] += a, c->h[1] += b, c->h[2] += cc, c->h[3] += d, c->h[4] += e, c->h[5] += f, c->h[6] += g, c->h[7] += h;
+}
+
+static void sha_add(Sha* c, const uint8_t* p, size_t n) {
+    while (n--) {
+        c->b[c->k++] = *p++;
+        c->n++;
+        if (c->k == 64) {
+            sha_block(c);
+            c->k = 0;
+        }
+    }
+}
+
+/* o sha256 do arquivo em hexadecimal (65 bytes); 0 = nao deu para ler */
+static int sha_file(const char* path, char out[65]) {
+    static const uint32_t h0[8] = { 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+                                    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19 };
+    static uint8_t buf[32768];
+    Sha c;
+    uint64_t bits;
+    size_t n;
+    int i;
+    FILE* f = fopen(path, "rb");
+    if (f == NULL) {
+        return 0;
+    }
+    memset(&c, 0, sizeof c);
+    memcpy(c.h, h0, sizeof h0);
+    while ((n = fread(buf, 1, sizeof buf, f)) > 0) {
+        sha_add(&c, buf, n);
+    }
+    fclose(f);
+    bits = c.n * 8;
+    {
+        uint8_t pad = 0x80, z = 0, len[8];
+        sha_add(&c, &pad, 1);
+        while (c.k != 56) {
+            sha_add(&c, &z, 1);
+        }
+        for (i = 0; i < 8; i++) {
+            len[i] = (uint8_t)(bits >> (56 - 8 * i));
+        }
+        sha_add(&c, len, 8);
+    }
+    for (i = 0; i < 8; i++) {
+        sprintf(out + i * 8, "%08x", (unsigned)c.h[i]);
+    }
+    return 1;
+}
+
+static pid_t spawn_sh(const char* cmd) {
+    char* argv[] = { "sh", "-c", (char*)cmd, NULL };
+    posix_spawnattr_t at;
+    struct sched_param sp = { 0 };
+    pid_t pid;
+    int r;
+    posix_spawnattr_init(&at);
+    posix_spawnattr_setschedpolicy(&at, SCHED_OTHER);
+    posix_spawnattr_setschedparam(&at, &sp);
+    posix_spawnattr_setflags(&at, POSIX_SPAWN_SETSCHEDULER);
+    r = posix_spawn(&pid, "/bin/sh", NULL, &at, argv, environ);
+    posix_spawnattr_destroy(&at);
+    return r == 0 ? pid : -1;
+}
+
 static int run_sh(const char* cmd) {
     char* argv[] = { "sh", "-c", (char*)cmd, NULL };
     posix_spawnattr_t at;
@@ -277,6 +416,84 @@ static int run_sh(const char* cmd) {
     while (waitpid(pid, &st, 0) < 0) {
     }
     return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+}
+
+/* o numero de "key" no JSON a partir de p; -1 = nao achou */
+static long json_num(const char* p, const char* key) {
+    char pat[64];
+    snprintf(pat, sizeof pat, "\"%s\"", key);
+    p = strstr(p, pat);
+    if (p == NULL) {
+        return -1;
+    }
+    p += strlen(pat);
+    while (*p == ' ' || *p == ':') {
+        p++;
+    }
+    return *p >= '0' && *p <= '9' ? strtol(p, NULL, 10) : -1;
+}
+
+/* o zip do port entre os arquivos do release ("assets"): o nome ZeldaOoT-miyoomini-*.zip; o tamanho, o sha256 e o
+ * endereco vem depois do nome, no mesmo item */
+static void find_asset(const char* js, const char* tag) {
+    const char* p = strstr(js, "\"assets\"");
+    g_url[0] = 0;
+    g_sha[0] = 0;
+    g_size = 0;
+    snprintf(g_tag, sizeof g_tag, "%s", tag);
+    while (p != NULL && (p = strstr(p + 1, "\"name\"")) != NULL) {
+        char name[128];
+        size_t n;
+        if (!json_str(p, "name", name, sizeof name)) {
+            continue;
+        }
+        n = strlen(name);
+        if (strncmp(name, "ZeldaOoT-miyoomini", 18) != 0 || n < 5 || strcasecmp(name + n - 4, ".zip") != 0) {
+            continue;
+        }
+        {
+            char dg[128] = "";
+            const char* u = strstr(p, "\"browser_download_url\"");
+            const char* d = strstr(p, "\"digest\"");
+            g_size = json_num(p, "size");
+            if (u != NULL) {
+                json_str(u, "browser_download_url", g_url, sizeof g_url);
+            }
+            if (d != NULL && (u == NULL || d < u) && json_str(d, "digest", dg, sizeof dg) && !strncmp(dg, "sha256:", 7) &&
+                strlen(dg + 7) == 64) {
+                snprintf(g_sha, sizeof g_sha, "%s", dg + 7);
+            }
+        }
+        fprintf(stderr, "[atualizacao] pacote %s, %ld bytes, sha256 %s\n", name, g_size, g_sha[0] ? g_sha : "(nao veio)");
+        return;
+    }
+    fprintf(stderr, "[atualizacao] o release nao tem o zip do port\n");
+}
+
+/* ha uma ROM na pasta do jogo (para refazer o cartucho)? */
+static int rom_present(void) {
+    DIR* d = opendir(".");
+    struct dirent* e;
+    int ok = 0;
+    if (d == NULL) {
+        return 0;
+    }
+    while (!ok && (e = readdir(d)) != NULL) {
+        const size_t n = strlen(e->d_name);
+        ok = n > 4 && (!strcasecmp(e->d_name + n - 4, ".z64") || !strcasecmp(e->d_name + n - 4, ".n64") ||
+                       !strcasecmp(e->d_name + n - 4, ".v64") || !strcasecmp(e->d_name + n - 4, ".zip"));
+    }
+    closedir(d);
+    return ok;
+}
+
+/* o pacote aberto em .update/x esta pronto: o cartucho atual vale para a versao nova? */
+static void set_ready(void) {
+    g_needRom = !cart_is_valid("oot.cart", UPD_GAME "/oot_swapmap.bin");
+    g_hasRom = rom_present();
+    fprintf(stderr, "[atualizacao] %s pronta para instalar%s\n", g_tag,
+            g_needRom ? (g_hasRom ? " (refaz o cartucho com a ROM da pasta)" : " (precisa da ROM: o cartucho muda)") : "");
+    g_st = MIYOO_UPST_READY;
 }
 
 /* o resultado vai ao menu; na procura automatica, so o de versao nova (o resto fica so no log) */
@@ -352,6 +569,7 @@ static void* check_thread(void* arg) {
         fprintf(f, "%ld\n", (long)time(NULL));
         fclose(f);
     }
+    find_asset(js, tag);
     notes[0] = 0;
     json_str(js, "body", notes, sizeof notes);
     md_clean(notes);
@@ -360,6 +578,26 @@ static void* check_thread(void* arg) {
     if (cur[0] && ver_cmp(cur, tag) >= 0) {
         result(MIYOO_UPD_LATEST, tag, cur, NULL);
     } else {
+        if (g_st != MIYOO_UPST_DOWNLOADING && g_st != MIYOO_UPST_PREPARING) {
+            /* ja baixada antes (o jogador escolheu salvar primeiro)? entao direto para a escolha */
+            char rd[64] = "";
+            FILE* r = fopen(UPD_READY, "r");
+            if (r != NULL) {
+                if (fgets(rd, sizeof rd, r) == NULL) {
+                    rd[0] = 0;
+                }
+                fclose(r);
+            }
+            rd[strcspn(rd, "\r\n")] = 0;
+            if (rd[0] && !strcmp(rd, tag) && access(UPD_GAME "/oot", R_OK) == 0) {
+                set_ready();
+            } else {
+                g_st = MIYOO_UPST_IDLE;
+                if (access(UPD_DIR, F_OK) == 0) {
+                    run_sh("rm -rf " UPD_DIR); /* (sobra de outra versao, ou de um download que nao terminou) */
+                }
+            }
+        }
         result(MIYOO_UPD_NEWER, tag, cur, notes);
     }
     g_busy = 0;
@@ -417,4 +655,265 @@ int port_update_check_start(int automatic) {
     }
     pthread_attr_destroy(&at);
     return 1;
+}
+
+/* ---------------------------------------------------------------- download e instalacao */
+
+static long mem_available(void) {
+    FILE* f = fopen("/proc/meminfo", "r");
+    char line[128];
+    long kb = -1;
+    if (f == NULL) {
+        return -1;
+    }
+    while (fgets(line, sizeof line, f) != NULL) {
+        if (sscanf(line, "MemAvailable: %ld", &kb) == 1) {
+            break;
+        }
+    }
+    fclose(f);
+    return kb;
+}
+
+static void* fail(int err) {
+    g_err = err;
+    g_st = MIYOO_UPST_FAILED;
+    run_sh("rm -rf " UPD_DIR);
+    g_busy = 0;
+    return NULL;
+}
+
+static void* dl_thread(void* arg) {
+    static char cmd[1024];
+    const char* curl = access(ONION_BIN "curl", X_OK) == 0 ? ONION_BIN "curl" : "curl";
+    struct statvfs vf;
+    struct stat st;
+    pid_t pid;
+    int status = 0, rc;
+    (void)arg;
+    run_sh("rm -rf " UPD_DIR);
+    if (mkdir(UPD_DIR, 0755) != 0 && errno != EEXIST) {
+        fprintf(stderr, "[atualizacao] nao criei %s: %s\n", UPD_DIR, strerror(errno));
+        return fail(MIYOO_UPERR_SPACE);
+    }
+    /* espaco no cartao: o zip, os arquivos abertos (cerca de 2,5x o zip) e folga */
+    if (statvfs(".", &vf) == 0) {
+        const unsigned long long freeB = (unsigned long long)vf.f_bavail * vf.f_frsize;
+        const unsigned long long need = (unsigned long long)g_size * 4 + (16ull << 20);
+        if (freeB < need) {
+            fprintf(stderr, "[atualizacao] pouco espaco no cartao: %llu MB livres, precisa de %llu\n", freeB >> 20, need >> 20);
+            return fail(MIYOO_UPERR_SPACE);
+        }
+    }
+    if (!has_route()) {
+        return fail(MIYOO_UPERR_NET);
+    }
+    snprintf(cmd, sizeof cmd,
+             "export " ONION_LIB "; exec %s -sS -L -f --cacert cacert.pem -A oot-miyoomini --connect-timeout 20 --speed-limit 512 "
+                       "--speed-time 30 -o " UPD_ZIP " '%s' 2> " UPD_DIR "/curl.err",
+             curl, g_url);
+    fprintf(stderr, "[atualizacao] baixando %s\n", g_url);
+    pid = spawn_sh(cmd);
+    if (pid < 0) {
+        return fail(MIYOO_UPERR_DOWNLOAD);
+    }
+    for (;;) {
+        const pid_t r = waitpid(pid, &status, WNOHANG);
+        if (stat(UPD_ZIP, &st) == 0) {
+            g_got = (long)st.st_size;
+        }
+        if (r == pid || (r < 0 && errno != EINTR)) {
+            break;
+        }
+        if (g_cancel) {
+            kill(pid, SIGTERM); /* (o sh deu lugar ao curl: exec) */
+            while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+            }
+            fprintf(stderr, "[atualizacao] download cancelado\n");
+            run_sh("rm -rf " UPD_DIR);
+            g_st = MIYOO_UPST_IDLE;
+            g_busy = 0;
+            return NULL;
+        }
+        usleep(200000);
+    }
+    rc = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    if (rc != 0 || stat(UPD_ZIP, &st) != 0 || (g_size > 0 && (long)st.st_size != g_size)) {
+        char err[200] = "";
+        FILE* f = fopen(UPD_DIR "/curl.err", "r");
+        if (f != NULL) {
+            if (fgets(err, sizeof err, f) == NULL) {
+                err[0] = 0;
+            }
+            fclose(f);
+        }
+        err[strcspn(err, "\r\n")] = 0;
+        fprintf(stderr, "[atualizacao] o download falhou: curl %d, %ld de %ld bytes, %s\n", rc, g_got, g_size, err);
+        return fail(MIYOO_UPERR_DOWNLOAD);
+    }
+    g_st = MIYOO_UPST_PREPARING;
+    if (g_sha[0]) {
+        char h[72];
+        if (!sha_file(UPD_ZIP, h) || strcmp(h, g_sha) != 0) {
+            fprintf(stderr, "[atualizacao] o sha256 nao confere: %s (esperado %s)\n", h, g_sha);
+            return fail(MIYOO_UPERR_VERIFY);
+        }
+        fprintf(stderr, "[atualizacao] sha256 confere\n");
+    }
+    {
+        const long kb = mem_available();
+        fprintf(stderr, "[atualizacao] memoria livre: %ld KB\n", kb);
+        if (kb >= 0 && kb < 12 * 1024) {
+            return fail(MIYOO_UPERR_MEMORY);
+        }
+    }
+    if (access(ONION_BIN "7z", X_OK) == 0) {
+        snprintf(cmd, sizeof cmd, ONION_LIB ONION_BIN "7z x -y -o" UPD_X " " UPD_ZIP " > " UPD_DIR "/x.log 2>&1");
+    } else {
+        snprintf(cmd, sizeof cmd, "unzip -o -q -d " UPD_X " " UPD_ZIP " > " UPD_DIR "/x.log 2>&1");
+    }
+    rc = run_sh(cmd);
+    if (rc != 0 || access(UPD_GAME "/oot", R_OK) != 0 || access(UPD_GAME "/oot_swapmap.bin", R_OK) != 0) {
+        fprintf(stderr, "[atualizacao] nao consegui abrir o zip (%d)\n", rc);
+        return fail(MIYOO_UPERR_EXTRACT);
+    }
+    remove(UPD_ZIP);
+    {
+        FILE* f = fopen(UPD_READY, "w");
+        if (f != NULL) {
+            fprintf(f, "%s\n", g_tag);
+            fclose(f);
+        }
+    }
+    set_ready();
+    g_busy = 0;
+    return NULL;
+}
+
+/* menu: A na janela "What's new"; 0 = nao comecou */
+int port_update_download_start(void) {
+    pthread_t th;
+    pthread_attr_t at;
+    struct sched_param sp = { 0 };
+    if (g_busy || g_url[0] == 0 || g_st == MIYOO_UPST_DOWNLOADING || g_st == MIYOO_UPST_PREPARING) {
+        return 0;
+    }
+    g_busy = 1;
+    g_cancel = 0;
+    g_got = 0;
+    g_err = 0;
+    g_st = MIYOO_UPST_DOWNLOADING;
+    pthread_attr_init(&at);
+    pthread_attr_setdetachstate(&at, PTHREAD_CREATE_DETACHED);
+    pthread_attr_setinheritsched(&at, PTHREAD_EXPLICIT_SCHED);
+    pthread_attr_setschedpolicy(&at, SCHED_OTHER);
+    pthread_attr_setschedparam(&at, &sp);
+    if (pthread_create(&th, &at, dl_thread, NULL) != 0) {
+        g_busy = 0;
+        g_st = MIYOO_UPST_IDLE;
+        pthread_attr_destroy(&at);
+        return 0;
+    }
+    pthread_attr_destroy(&at);
+    return 1;
+}
+
+void port_update_cancel(void) {
+    if (g_st == MIYOO_UPST_DOWNLOADING) {
+        g_cancel = 1;
+    }
+}
+
+int port_update_has_package(void) {
+    return g_url[0] != 0;
+}
+
+/* o estado para o menu (got/total: bytes baixados) */
+int port_update_state(long* got, long* total, int* err, int* needRom, int* hasRom) {
+    *got = g_got;
+    *total = g_size;
+    *err = g_err;
+    *needRom = g_needRom;
+    *hasRom = g_hasRom;
+    return g_st;
+}
+
+void port_update_forget_error(void) {
+    if (g_st == MIYOO_UPST_FAILED) {
+        g_st = MIYOO_UPST_IDLE;
+    }
+}
+
+/* os arquivos de src no lugar dos de dst (pastas: entra nelas); "oot" (o programa) por ultimo, no fim de tudo */
+static int move_tree(const char* src, const char* dst, int* nfiles) {
+    char a[512], b[512];
+    DIR* d = opendir(src);
+    struct dirent* e;
+    int bad = 0;
+    if (d == NULL) {
+        return 0; /* (o pacote nao tem essa pasta) */
+    }
+    mkdir(dst, 0755);
+    while ((e = readdir(d)) != NULL) {
+        struct stat st;
+        if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) {
+            continue;
+        }
+        snprintf(a, sizeof a, "%s/%s", src, e->d_name);
+        snprintf(b, sizeof b, "%s/%s", dst, e->d_name);
+        if (stat(a, &st) != 0) {
+            continue;
+        }
+        if (S_ISDIR(st.st_mode)) {
+            bad |= move_tree(a, b, nfiles);
+        } else if (strcmp(a, UPD_GAME "/oot") != 0) {
+            if (rename(a, b) != 0) {
+                fprintf(stderr, "[atualizacao] nao troquei %s: %s\n", b, strerror(errno));
+                bad = 1;
+            } else {
+                (*nfiles)++;
+            }
+        }
+    }
+    closedir(d);
+    return bad;
+}
+
+/* menu: "Instalar e reiniciar". 0 = instalada (o menu pede o reinicio); senao MIYOO_UPERR_* */
+int port_update_install(void) {
+    int n = 0, bad = 0;
+    FILE* f;
+    if (g_st != MIYOO_UPST_READY) {
+        return MIYOO_UPERR_EXTRACT;
+    }
+    g_hasRom = rom_present();
+    if (g_needRom && !g_hasRom) {
+        return MIYOO_UPERR_NEEDROM;
+    }
+    /* a pasta do jogo e a pasta . (o atalho roda o jogo de dentro dela); Shortcuts e Imgs ficam duas acima */
+    bad |= move_tree(UPD_GAME, ".", &n);
+    if (access("../../Shortcuts", F_OK) == 0) {
+        bad |= move_tree(UPD_PORTS "/Shortcuts", "../../Shortcuts", &n);
+        bad |= move_tree(UPD_PORTS "/Imgs", "../../Imgs", &n);
+    }
+    if (bad) {
+        fprintf(stderr, "[atualizacao] instalacao incompleta (%d arquivos trocados); o programa ficou o antigo\n", n);
+        return MIYOO_UPERR_INSTALL;
+    }
+    if (rename(UPD_GAME "/oot", "oot") != 0) {
+        fprintf(stderr, "[atualizacao] nao troquei oot: %s\n", strerror(errno));
+        return MIYOO_UPERR_INSTALL;
+    }
+    f = fopen("version.txt", "w");
+    if (f != NULL) {
+        fprintf(f, "%s\n", g_tag[0] == 'v' || g_tag[0] == 'V' ? g_tag + 1 : g_tag);
+        fclose(f);
+    }
+    sync();
+    run_sh("rm -rf " UPD_DIR);
+    sync();
+    port_update_installed = 1;
+    fprintf(stderr, "[atualizacao] %s instalada (%d arquivos + oot); reiniciando\n", g_tag, n);
+    g_st = MIYOO_UPST_IDLE;
+    return 0;
 }
