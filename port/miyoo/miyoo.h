@@ -49,6 +49,10 @@ void miyoo_rumble_off(void);
 enum { MENU_K_UP, MENU_K_DOWN, MENU_K_LEFT, MENU_K_RIGHT, MENU_K_A, MENU_K_TAB_PREV, MENU_K_TAB_NEXT, MENU_K_CLOSE, MENU_K_X };
 void miyoo_menu_status(const char* text);
 void miyoo_menu_slots_changed(void);
+/* atualizacoes (update_miyoo.c): o resultado de "Procurar atualizacoes" volta ao menu */
+enum { MIYOO_UPD_LATEST, MIYOO_UPD_NEWER, MIYOO_UPD_NO_NET, MIYOO_UPD_ERROR };
+void miyoo_menu_update_result(int code, const char* latest, const char* cur, const char* notes);
+int port_update_check_start(void);
 int miyoo_menu_active(void);
 int miyoo_menu_dirty(void);
 void miyoo_menu_open(void);

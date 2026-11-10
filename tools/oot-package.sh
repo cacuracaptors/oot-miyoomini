@@ -53,6 +53,11 @@ cp "$MAP" "$GAME/oot_swapmap.bin" || exit 1
 PORTDIR="$(cd "$(dirname "$0")/.." && pwd)"
 # leia-me do jogador (em ingles), na pasta do jogo
 cp "$PORTDIR/dist/README.txt" "$GAME/README.txt" || exit 1
+# atualizacoes (port/miyoo/update_miyoo.c): a versao instalada e a lista de certificados para conferir o HTTPS do GitHub
+cp "$PORTDIR/dist/cacert.pem" "$GAME/cacert.pem" || exit 1
+if [ -n "$VERSION" ]; then
+    echo "$VERSION" > "$GAME/version.txt" || exit 1
+fi
 if [ -d "$PORTDIR/idiomas" ]; then
     mkdir -p "$GAME/idiomas" && cp "$PORTDIR"/idiomas/*.oot "$GAME/idiomas/" || exit 1
 fi

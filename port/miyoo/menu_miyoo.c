@@ -71,6 +71,7 @@ static const Item k_items[] = {
     R(TAB_GENERAL, "sound_volume", "Sound effects volume (%)", "Volume dos efeitos (%)", 0, 150, 10),
     T(TAB_GENERAL, "hold_b_fast_text", "Hold B to fast-forward text", "Segurar B acelera o texto"),
     T(TAB_GENERAL, "skip_cutscenes", "START skips cutscenes", "START pula cenas"),
+    { TAB_GENERAL, "@update", "Check for updates", "Procurar atualizações", -1, -1, 0, 0 },
     { TAB_GENERAL, "@restore", "Restore defaults (all tabs)", "Restaurar padrão (todas as abas)", -1, -1, 0, 0 },
     { TAB_GENERAL, "@reset", "Restart the game", "Reiniciar o jogo", -1, -1, 0, 0 },
     { TAB_GENERAL, "@quit", "Quit the game", "Sair do jogo", -1, -1, 0, 0 },
@@ -481,14 +482,58 @@ void miyoo_menu_status(const char* text) {
     g_dirty = 1;
 }
 
+static void status_ms(const char* text, double ms) {
+    snprintf(g_status, sizeof g_status, "%s", text);
+    g_statusUntil = miyoo_now_ms() + ms;
+    g_dirty = 1;
+}
 
+/* janela "What's new" (update_miyoo.c achou uma versao nova): o texto do release, rolando com cima/baixo */
+#define UPD_MAXL 220
+static volatile int g_upd;
+static char g_updTitle[128];
+static char g_updText[16384];
+static char g_updLines[UPD_MAXL][256];
+static int g_updN, g_updTop, g_updWrapped;
 static volatile int g_open;
+static const char* tr(const char* en, const char* pt);
+
+void miyoo_menu_update_result(int code, const char* latest, const char* cur, const char* notes) {
+    char buf[96];
+    if (code == MIYOO_UPD_LATEST) {
+        snprintf(buf, sizeof buf, "%s v%s", tr("You have the latest version:", "Você já tem a versão mais nova:"),
+                 cur[0] == 'v' || cur[0] == 'V' ? cur + 1 : cur);
+        status_ms(buf, 8000.0);
+    } else if (code == MIYOO_UPD_NEWER) {
+        snprintf(g_updTitle, sizeof g_updTitle, "%s %s", tr("New version available:", "Versão nova disponível:"), latest);
+        if (cur[0]) {
+            snprintf(g_updTitle + strlen(g_updTitle), sizeof g_updTitle - strlen(g_updTitle), " (%s v%s)",
+                     tr("you have", "você tem"), cur[0] == 'v' || cur[0] == 'V' ? cur + 1 : cur);
+        }
+        snprintf(g_updText, sizeof g_updText, "%s", notes != NULL ? notes : "");
+        g_updTop = 0;
+        g_updWrapped = 0;
+        g_status[0] = 0;
+        if (g_open) {
+            g_upd = 1;
+        } else {
+            status_ms(g_updTitle, 8000.0);
+        }
+    } else if (code == MIYOO_UPD_NO_NET) {
+        status_ms(tr("No internet: turn on Wi-Fi in OnionOS", "Sem internet: ligue o Wi-Fi no OnionOS"), 8000.0);
+    } else {
+        status_ms(tr("Could not check for updates", "Não foi possível procurar atualizações"), 8000.0);
+    }
+    g_dirty = 1;
+}
+
+
 static int g_tab, g_sel[TAB_COUNT], g_top[TAB_COUNT];
 static int g_changed;
 static int g_restoreArmed; /* "Restaurar padrao" / "Sair" / "Reiniciar": o 1o A pede confirmacao, o 2o faz (1 restaurar,
                             * 2 sair, 3 reiniciar) */
 static int action_id(const char* name) {
-    return !strcmp(name, "@quit") ? 2 : !strcmp(name, "@reset") ? 3 : !strcmp(name, "@keys") ? 4 : 1;
+    return !strcmp(name, "@quit") ? 2 : !strcmp(name, "@reset") ? 3 : !strcmp(name, "@keys") ? 4 : !strcmp(name, "@update") ? 5 : 1;
 }
 static int g_confirm; /* pergunta na tela: uma opcao que so vale reiniciando mudou; reiniciar agora ou cancelar */
 static int g_openVal[256];  /* valores ao abrir o menu (para saber se uma opcao de reiniciar mudou) */
@@ -626,6 +671,7 @@ void miyoo_menu_open(void) {
             g_openVal[i] = v != NULL ? *v : 0;
         }
         g_confirm = 0;
+        g_upd = 0;
         miyoo_rumble_off();
         g_slotsDirty = 1;
         g_saveArmed = -1;
@@ -700,6 +746,13 @@ static void change(const Item* it, int dir) {
     }
     if (is_action(it)) {
         const int which = action_id(it->name);
+        if (which == 5) {
+            /* procurar atualizacoes: um A so (nao muda nada no jogo) */
+            if (port_update_check_start()) {
+                status_ms(tr("Checking for updates...", "Procurando atualizações..."), 30000.0);
+            }
+            return;
+        }
         if (g_restoreArmed == which && miyoo_now_ms() - g_restoreAt < 4000.0) {
             g_restoreArmed = 0;
             if (which == 1) {
@@ -765,6 +818,19 @@ void miyoo_menu_key(int k) {
     g_selAt = miyoo_now_ms(); /* (nome comprido e descricao comecam a rolar de novo) */
     int* sel = &g_sel[g_tab];
     const Item* it;
+    if (g_upd) {
+        /* janela "What's new": cima/baixo rolam o texto, B (ou A) fecha */
+        const int vis = 11;
+        if (k == MENU_K_UP && g_updTop > 0) {
+            g_updTop--;
+        } else if (k == MENU_K_DOWN && g_updTop + vis < g_updN) {
+            g_updTop++;
+        } else if (k == MENU_K_CLOSE || k == MENU_K_A) {
+            g_upd = 0;
+        }
+        g_dirty = 1;
+        return;
+    }
     if (g_confirm) {
         if (k == MENU_K_A) { /* sim: o jogo salva o estado, reinicia e continua dali */
             close_menu(1);
@@ -1636,7 +1702,7 @@ static void draw_footer(void) {
 void miyoo_menu_render(uint32_t* page) {
     int first, n, i, *sel, *top;
     char buf[64];
-    if (!g_dirty && g_baseOk && g_baseTab == g_tab && g_baseSel == g_sel[g_tab] && g_baseAt == g_selAt && !g_confirm &&
+    if (!g_dirty && g_baseOk && g_baseTab == g_tab && g_baseSel == g_sel[g_tab] && g_baseAt == g_selAt && !g_confirm && !g_upd &&
         (g_helpState == 1 || g_helpState == 2)) {
         /* so o cartao da descricao mudou (crescendo): a imagem de antes e o cartao por cima */
         g_anim = 0;
@@ -1674,6 +1740,56 @@ void miyoo_menu_render(uint32_t* page) {
     rrect(10, HELP_Y, W - 20, HELP_H, 14, TH(help), TH(helpA));
     draw_tabs();
 
+    if (g_upd) {
+        /* "What's new": a versao nova e o texto do release */
+        const int x0 = 24, y0 = 40, bw = W - 48, bh = 400, vis = 11, lh = 26;
+        int j;
+        rect_a(0, 0, W, H, 0x000000u, 90);
+        shadow(x0, y0, bw, bh, 18);
+        rrect(x0, y0, bw, bh, 18, TH(card), 255);
+        if (!g_updWrapped) {
+            /* o texto em linhas da largura da janela (cada paragrafo do release separado) */
+            const char* p = g_updText;
+            g_updN = 0;
+            while (*p && g_updN < UPD_MAXL) {
+                static char para[1024];
+                static char tmp[HELP_MAXL][256];
+                const char* e = strchr(p, '\n');
+                const size_t k = e != NULL ? (size_t)(e - p) : strlen(p);
+                const size_t kk = k < sizeof para - 1 ? k : sizeof para - 1;
+                int m, q;
+                memcpy(para, p, kk);
+                para[kk] = 0;
+                if (kk == 0) {
+                    g_updLines[g_updN++][0] = 0;
+                } else {
+                    m = help_split(para, bw - 48, tmp);
+                    for (q = 0; q < m && g_updN < UPD_MAXL; q++) {
+                        snprintf(g_updLines[g_updN++], 256, "%s", tmp[q]);
+                    }
+                }
+                p += k;
+                if (*p == '\n') {
+                    p++;
+                }
+            }
+            g_updWrapped = 1;
+        }
+        big(x0 + 24, y0 + 16, g_updTitle, TH(accent));
+        for (j = 0; j < vis && g_updTop + j < g_updN; j++) {
+            big(x0 + 24, y0 + 56 + j * lh, g_updLines[g_updTop + j], TH(text));
+        }
+        if (g_updTop > 0) {
+            chevron(x0 + bw - 24, y0 + 60, 6, 2, TH(accent));
+        }
+        if (g_updTop + vis < g_updN) {
+            chevron(x0 + bw - 24, y0 + 56 + vis * lh - 10, 6, 3, TH(accent));
+        }
+        big(x0 + 24, y0 + bh - 36,
+            tr("Up/Down: scroll   B: close", "Cima/baixo: rola   B: fecha"),
+            TH(dim));
+        return;
+    }
     if (g_confirm) {
         /* essas opcoes so valem reiniciando: reinicia ou cancela */
         const int x0 = 44, y0 = 120, bw = W - 88, bh = 190;
@@ -1778,7 +1894,13 @@ void miyoo_menu_render(uint32_t* page) {
     if (n > 0) {
         static char tmp[1024];
         const Item* it = tab_item(g_tab, *sel);
-        const char* h = (is_action(it) && !strcmp(it->name, "@reset"))
+        const char* h = (is_action(it) && !strcmp(it->name, "@update"))
+                            ? tr("Looks for a new version of the port on GitHub. Updates fix bugs and bring new features, so it "
+                                 "is worth checking now and then. Needs Wi-Fi turned on in OnionOS. Press A.",
+                                 "Procura uma versão nova do port no GitHub. As atualizações corrigem bugs e trazem funções "
+                                 "novas, então vale a pena procurar de vez em quando. Precisa do Wi-Fi ligado no OnionOS. "
+                                 "Aperte A.")
+                        : (is_action(it) && !strcmp(it->name, "@reset"))
                             ? tr("Saves the game (autosave) and starts it again from the beginning, with the intro, like the "
                                  "N64 reset button. Press A twice.",
                                  "Salva o jogo (salvar sozinho) e começa de novo do início, com a abertura, como o botão de "

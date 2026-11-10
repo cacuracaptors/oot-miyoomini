@@ -72,7 +72,7 @@ echo "[4/5] texturas da logo"
 python3 "$PORT/tools/hd/oot-hd-so-logo.py" "$OUT/texturas_hd.pak" "$W/texturas_hd.pak" || exit 1
 
 echo "[5/5] pasta do cartao e zip"
-P="$W/pacote" EXE="$W/oot" RCP="$W/oot_dados.rcp" PAK="$W/texturas_hd.pak" IMG="$IMG" OUT="$OUT" ROOT="$ROOT" \
+VERSION="$VER" P="$W/pacote" EXE="$W/oot" RCP="$W/oot_dados.rcp" PAK="$W/texturas_hd.pak" IMG="$IMG" OUT="$OUT" ROOT="$ROOT" \
     sh "$PORT/tools/oot-package.sh" > "$W/pacote.log" || { cat "$W/pacote.log"; exit 1; }
 ZIPOUT="$DESK/ZeldaOoT-miyoomini-v$VER.zip"
 rm -f "$ZIPOUT"

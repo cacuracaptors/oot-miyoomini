@@ -340,6 +340,15 @@ UI_IT = {
     "Restore defaults (all tabs)": "Valori predefiniti (tutte le schede)",
     "Quit the game": "Esci dal gioco",
     "Restart the game": "Riavvia il gioco",
+    "Check for updates": "Cerca aggiornamenti",
+    "Looks for a new version of the port on GitHub. Updates fix bugs and bring new features, so it is worth checking now and then. Needs Wi-Fi turned on in OnionOS. Press A.": "Cerca una nuova versione del port su GitHub. Gli aggiornamenti correggono bug e portano nuove funzioni, quindi conviene controllare ogni tanto. Serve il Wi-Fi attivo in OnionOS. Premete A.",
+    "Checking for updates...": "Ricerca aggiornamenti...",
+    "You have the latest version:": "Hai già l'ultima versione:",
+    "New version available:": "Nuova versione disponibile:",
+    "you have": "hai",
+    "No internet: turn on Wi-Fi in OnionOS": "Niente internet: attivate il Wi-Fi in OnionOS",
+    "Could not check for updates": "Impossibile cercare aggiornamenti",
+    "Up/Down: scroll   B: close": "Su/Giù: scorri   B: chiudi",
     "Saves the game (autosave) and starts it again from the beginning, with the intro, like the N64 reset button. Press A twice.":
         "Salva la partita (salvataggio auto) e la ricomincia dall'inizio, con l'introduzione, come il tasto reset del N64. Premete A due volte.",
     "Every option in this menu goes back to the port's factory values (and the diagnostics are turned off). Press A twice.":
