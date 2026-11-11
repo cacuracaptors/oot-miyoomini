@@ -796,6 +796,8 @@ static void slot_reduce(HrSlot *s) {
     }
 }
 
+static int g_menuSeen, g_menuLast, g_menuForced, g_lvSaved; /* (menu de pausa marcado pelo jogo: gx_hr_menu_mark) */
+
 void gx_hr_reading(const void *p) {
     const uint8_t *a = (const uint8_t *)p;
     const size_t n = (size_t)FB_W * FB_H * 2u;
@@ -812,7 +814,12 @@ void gx_hr_reading(const void *p) {
             s->dirty = s == g_cur; /* se ainda e o alvo, continua sendo desenhada */
         }
     }
-    if (g_zDirty && g_zRam != NULL && a >= g_zRam && a < g_zRam + n) {
+    /* o z-buffer da RAM lido como textura: so no menu de pausa, onde o jogo guarda ali a copia do fundo (pbg_save).
+     * O z maior nao vai para la: escrevia por cima da copia, e a cada uma das ~40 faixas do fundo lidas por desenho
+     * (o z continua marcado enquanto e o alvo): ~23 ms a mais por desenho com o menu em resolucao maior (tela de
+     * 752x560 com o filtro retro, ou pause_menu_320 = 0; 11/2026) */
+    if (g_zDirty && g_zRam != NULL && a >= g_zRam && a < g_zRam + n &&
+        !(g_pbgValid || g_pbgCopy || g_menuSeen || g_menuLast)) {
         gx_batch_flush();
         reduce(g_zBuf, g_passW, g_passH, (uint8_t *)(uintptr_t)g_zRam, 0);
         g_zDirty = gx.hrActive && (gx.zimg == g_zBuf || gx.cimg.addr == g_zBuf);
@@ -821,7 +828,6 @@ void gx_hr_reading(const void *p) {
 
 int gx_menu_320 = 1;
 int gx_arquivos_320 = 1; /* opcao arquivos_320: a tela de arquivos (menu azul do novo jogo) em 320x240 */
-static int g_menuSeen, g_menuLast, g_menuForced, g_lvSaved;
 
 void gx_hr_menu_mark(int open) {
     if (open) { /* (quem chama ja olhou a opcao: menu_320 ou arquivos_320) */
