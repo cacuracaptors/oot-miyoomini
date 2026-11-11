@@ -41,10 +41,12 @@ double gx_hr_fixo_ms = 3.0; /* parte do desenho que nao depende da resolucao (ve
  * o desenho ficava bem abaixo do alvo (o degrau de cima nao cabia) e os nucleos sobravam */
 #define HR_LV 11
 static int k_lvW[HR_LV] = { 640, 608, 576, 544, 512, 480, 448, 416, 384, 352, 320 };
-/* tela de 752x560 (Mini v4, Mini Flip; gx_hr_set_panel): degraus ate o tamanho da tela. A imagem tem o formato da tela
+/* tela de 752x560 (Mini v4, Mini Flip; gx_hr_set_panel): degraus ate 640, como no Mini Plus (11/2026: antes ate 752,
+ * o tamanho da tela; 752x560 tem 27% mais pixels que 640x480, e estes aparelhos rodam a 1600 MHz: o desempenho fica mais
+ * constante, e o chip 2D amplia a imagem para a tela, que e menor que a do Plus). A imagem tem o formato da tela
  * (altura = largura * 560 / 752) e a escala e a mesma nos dois sentidos (largura / 320): a imagem do N64 sai inteira na
  * largura e perde ~1,7 linha do N64 embaixo (0,7%). Com o filtro retro: 376x280 fixo, cada linha do jogo em 2 da tela */
-static const int k_lvW560[HR_LV] = { 752, 712, 672, 632, 592, 552, 512, 464, 416, 376, 320 };
+static const int k_lvW560[HR_LV] = { 640, 608, 576, 544, 512, 480, 448, 416, 376, 352, 320 };
 #define RETRO560_W 376
 static int g_maxW = 640, g_maxH = 480; /* maior imagem (buffers) */
 #define HR_MAXW g_maxW
@@ -59,10 +61,10 @@ void gx_hr_set_panel(int w, int h) {
         for (i = 0; i < HR_LV; i++) {
             k_lvW[i] = k_lvW560[i];
         }
-        g_maxW = 752;
-        g_maxH = 560;
+        g_maxW = 640;
+        g_maxH = (640 * 560 + 376) / 752; /* (477: pass_h(640)) */
         gx_hr_pan560 = 1;
-        fprintf(stderr, "[resolucao] tela de 752x560: desenho ate 752x560 (filtro retro: 376x280)\n");
+        fprintf(stderr, "[resolucao] tela de 752x560: desenho ate 640x%d, ampliado para a tela (filtro retro: 376x280)\n", g_maxH);
     }
 }
 
@@ -839,8 +841,9 @@ void gx_hr_menu_mark(int open) {
 void gx_hr_sync_opts(void) {
     extern int gx_texto_320, gx_texto_320_opt; /* gfx_ge.c */
     if (gx_hr_pan560) {
-        /* tela de 752x560: a opcao vale proporcional (640 = 752, 480 = 564...); o filtro retro fica em 376x280 */
-        gx_hr_max = gx_retro ? RETRO560_W : gx_hr_max_opt <= FB_W ? FB_W : gx_hr_max_opt * 752 / 640; /* (proporcional) */
+        /* tela de 752x560: a opcao vale como no Mini Plus (ate 640; antes era proporcional, 640 = 752); o filtro retro
+         * fica em 376x280 */
+        gx_hr_max = gx_retro ? RETRO560_W : gx_hr_max_opt <= FB_W ? FB_W : gx_hr_max_opt > 640 ? 640 : gx_hr_max_opt;
     } else {
         gx_hr_max = gx_retro ? FB_W : gx_hr_max_opt;
     }
