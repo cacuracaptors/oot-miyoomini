@@ -14,8 +14,8 @@ from your European ROM.
 
 ### Graphics and performance
 
-- Native resolution with dynamic resolution (640x480 on the Mini Plus and Mini; 752x560, the screen's own size, on
-  the Mini v4 and Mini Flip): the 3D picture gets sharper or softer by itself to keep the game smooth,
+- Native resolution with dynamic resolution (up to 640x480 on every device; on the Mini v4 and Mini Flip the
+  2D chip scales the picture up to their 752x560 screen): the 3D picture gets sharper or softer by itself to keep the game smooth,
   with a target frame time you can choose. It can go from 640 down to 320 pixels wide (as on the N64), but in
   practice it rarely drops much: on the Mini Plus (1800 MHz) it stays at or near the full 640 most of the time, and
   only goes down a little in the busiest areas, like the Kokiri and Kakariko villages. On the models limited to 1600 MHz (Mini, Mini v4, Mini Flip) it
@@ -31,6 +31,8 @@ from your European ROM.
   and an optional CRT screen shape (curved edges, rounded corners, slightly darker border)
 - A new HD title logo
 - Adjustable brightness (gamma) without any cost: Select+Up/Down during the game
+- Screen contrast, hue and saturation in the options menu (Graphics), like Tweaks > Display in OnionOS, only
+  while the game runs and without any cost
 - CPU clock picked by device (1800 MHz on the Mini Plus, 1600 MHz on the Mini, Mini v4 and Mini Flip), kept
   there during the game
 
