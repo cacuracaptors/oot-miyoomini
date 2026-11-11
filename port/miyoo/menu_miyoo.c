@@ -256,6 +256,8 @@ static const Item k_items[] = {
     T(TAB_GFX, "opaque_text_boxes", "Opaque text boxes", "Caixas de texto opacas"),
     T(TAB_GFX, "opaque_pause_menu", "Opaque pause menu", "Menu de pausa opaco"),
     T(TAB_GFX, "light_hit_marks", "Lighter hit flash", "Brilho de acerto leve"),
+    T(TAB_GFX, "half_res_water", "Half-resolution water", "Água em meia resolução"),
+    T(TAB_GFX, "half_res_blend", "Half-res blended textures", "Texturas misturadas em meia resolução"),
     T(TAB_GFX, "lens_flare", "Sun lens flare", "Reflexo do sol na lente"),
     R(TAB_GFX, "light_halo_tolerance", "Light halo tolerance", "Folga dos halos de luz", 0, 2000, 100),
 };

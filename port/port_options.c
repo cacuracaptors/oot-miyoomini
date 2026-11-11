@@ -216,6 +216,7 @@ extern int gx_hr_max_opt, gx_hr_alvo, gx_hr_texto, gx_retro, gx_retro_forca, gx_
 int port_opt_nucleos_fixos = 1;  /* desenho no nucleo 0, auxiliar do desenho no 1 */
 int port_opt_clock = 1600;          /* MHz da CPU ao abrir o jogo (0 = o que o sistema deixar, 1200) */
 int port_opt_clock_guard = 1; /* 1 = se o clock da CPU cair sozinho durante o jogo, pede de novo (a cada 10 s) */
+extern int gx_agua_meia, gx_mistura_meia; /* gfx_fast.inc: texturas em meia resolucao (lote 247) */
 extern int gx_mistura_desliza;           /* gfx_fast.inc: texturas que deslizam pre-misturadas (lote 183) */
 extern int gx_ceu_mistura, gx_corte; /* gfx_fast.inc: ceu pre-misturado e recorte (teste da lentidao) */
 extern int port_fi_enabled;      /* port/frame_interp.c: quadros intermediarios (30 por segundo) */
@@ -603,6 +604,10 @@ static const struct {
       "(test) 1 = textures seen up close (stretched over several pixels) read on half of the pixels, the ones in between averaged; measured slower on the device, so 0 (default) = every pixel" },
     { "Graphics", "light_hit_marks", "", &port_opt_light_hit_marks,
       "1 = the flash when the sword hits an enemy or a liftable rock is drawn only where the image has something, and its last almost-empty frames are skipped (lighter in combat; looks the same); 0 = like the original" },
+    { "Graphics", "half_res_water", "", &gx_agua_meia,
+      "1 = water surfaces (like Lake Hylia) read their texture on every other pixel and each point is used for the pixel next to it too: lighter where the water fills the screen, the water may look a bit softer; 0 = every pixel, like the original" },
+    { "Graphics", "half_res_blend", "", &gx_mistura_meia,
+      "1 = surfaces that blend two textures (moving walls and floor of Zora's Domain, waterfalls) read them on every other pixel and each point is used for the pixel next to it too: lighter there, may look a bit softer; 0 = every pixel, like the original" },
     { "Graphics", "lens_flare", "", &port_opt_lens_flare,
       "1 = the sun's lens flare (the colored circles and the glare when looking at the sun) like the original; 0 = off (lighter: when the sun shows they cover a good part of the screen with transparency)" },
     { "Graphics", "hd_title_logo", "", &port_opt_hd_logo,
@@ -984,6 +989,8 @@ static const struct {
     { "light_halo_tolerance", 100 },
     { "old_reflections", 0 },
     { "lens_flare", 1 },
+    { "half_res_water", 0 },
+    { "half_res_blend", 0 },
     { "light_hit_marks", 1 },
     { "fast_magnified_textures", 0 },
     { "hd_title_logo", 1 },

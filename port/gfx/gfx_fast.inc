@@ -98,6 +98,7 @@ typedef struct {
     int cdith; /* pontilhado da cor (gfx_tri.c, gx_dith) */
     int bl[2][4];
     int needMem;
+    int meia2; /* texturas lidas em metade dos pixels de cada linha (opcoes half_res_water / half_res_blend) */
     int dead;                   /* alfa constante reprovado no teste: a primitiva nao desenha nada */
     uint32_t needV;             /* bit i = o combinador le V[i] */
     int needShade[4];
@@ -466,6 +467,9 @@ int gx_ceu_mistura = 1;
  * textura 4x maior; replay --sem-mistura-desliza / --mistura-desliza N). */
 int gx_cc_alias = 1; /* (lote 190: 1o ciclo que so copia uma entrada lido direto pelo 2o; replay --sem-alias) */
 int gx_mistura_desliza = 2; /* (padrao 2 desde o lote 188: medido no lago Hylia, 384 -> 416 com o mesmo tempo) */
+/* Lote 247: texturas em meia resolucao (ideia do Miyoo64), opcoes do menu (Graficos): agua e texturas misturadas */
+int gx_agua_meia = 0;
+int gx_mistura_meia = 0;
 typedef struct {
     int sizeS, sizeT;   /* textura misturada */
     int raS, raT;       /* passo da 1a textura por texel da grade, em 1/64 de texel (64 = mesma grade) */
@@ -2489,6 +2493,19 @@ static void fused_check(FastProg *f) {
     }
 #endif
     f->fused = ok;
+    {
+        /* meia resolucao das texturas (lote 247): a textura e lida em 4 pontos por grupo de 8 pixels (no meio de cada
+         * par) e cada ponto vale para os 2 pixels; sombreamento, neblina, mistura com a tela e profundidade continuam
+         * pixel a pixel. So superficies com filtro, teste de profundidade e sem recorte por alfa (bordas recortadas,
+         * HUD e efeitos sem profundidade ficam de fora).
+         *  agua (half_res_water): transparente (mistura com a tela), uma textura que repete: lago Hylia;
+         *  mistura (half_res_blend): duas texturas misturadas: paredes e chao do Dominio Zora, cachoeiras. */
+        const int base = ok && f->bilerp && !f->ac && !f->cvgXAlpha && f->zcmp && f->useT[0] && f->sampn[0] != NULL &&
+                         !f->t[0].hdPoint;
+        const int agua = gx_agua_meia && f->needMem && !f->useT[1] && f->t[0].modeS == 0 && f->t[0].modeT == 0;
+        const int mist = gx_mistura_meia && f->useT[1] && f->sampn[1] != NULL && !f->t[1].hdPoint;
+        f->meia2 = base && (agua || mist);
+    }
 }
 
 #if defined(__ARM_NEON) || defined(__ARM_NEON__)
@@ -2663,6 +2680,33 @@ static inline __attribute__((always_inline)) void tcph_tpl(const SpanCtx *sc, in
         vst1q_f32(S + 8 * li + 4, s1);
         vst1q_f32(T + 8 * li, t0);
         vst1q_f32(T + 8 * li + 4, t1);
+    }
+}
+
+/* meia resolucao (opcoes half_res_water / half_res_blend): S e T de 4 pontos por grupo vivo, no meio de cada par de
+ * pixels (x + 0,5; x + 2,5; x + 4,5; x + 6,5); 4 por grupo, seguidos, na ordem de live */
+static inline __attribute__((always_inline)) void tcph_half_tpl(const SpanCtx *sc, int xc, const uint8_t *live, int nl,
+                                                                float *S, float *T, const int PERSP) {
+    static const float k_half[4] = { 0.5f, 2.5f, 4.5f, 6.5f };
+    const GxPrim *p = sc->p;
+    const float32x4_t r0 = vdupq_n_f32(sc->rowF[0]), r1 = vdupq_n_f32(sc->rowF[1]), r2 = vdupq_n_f32(sc->rowF[2]);
+    const float32x4_t d0 = vdupq_n_f32(p->fdx[0]), d1 = vdupq_n_f32(p->fdx[1]), d2 = vdupq_n_f32(p->fdx[2]);
+    const float32x4_t tiny = vdupq_n_f32(1e-12f), lanes = vld1q_f32(k_half);
+    int li;
+    for (li = 0; li < nl; li++) {
+        const float32x4_t fx = vaddq_f32(vdupq_n_f32((float)(xc + 8 * live[li]) - p->fx0), lanes);
+        float32x4_t s = vaddq_f32(r0, vmulq_f32(d0, fx)), t = vaddq_f32(r1, vmulq_f32(d1, fx));
+        if (PERSP) {
+            float32x4_t q = vaddq_f32(r2, vmulq_f32(d2, fx)), rq;
+            q = vbslq_f32(vcltq_f32(vabsq_f32(q), tiny), tiny, q);
+            rq = vrecpeq_f32(q);
+            rq = vmulq_f32(rq, vrecpsq_f32(q, rq));
+            rq = vmulq_f32(rq, vrecpsq_f32(q, rq));
+            s = vmulq_f32(s, rq);
+            t = vmulq_f32(t, rq);
+        }
+        vst1q_f32(S + 4 * li, s);
+        vst1q_f32(T + 4 * li, t);
     }
 }
 
@@ -3185,7 +3229,34 @@ static inline __attribute__((always_inline)) void span_fused_tpl(const GxPrim *p
             continue;
         }
         /* --- 2. texturas dos grupos vivos --- */
-        if (useT0 || useT1) {
+        if (f->meia2 && p->hasTex && !gx_fast_exact) {
+            /* meia resolucao: 4 pontos de textura por grupo, cada um vale para 2 pixels vizinhos */
+            float S[4 * NCH + 8], T[4 * NCH + 8];
+            uint32_t tmp[4 * NCH + 8];
+            const int n2 = 4 * nl, ng2 = (n2 + 7) >> 3;
+            int j, t;
+            tcph_half_tpl(&sc, xc, live, nl, S, T, !sc.qOne);
+            for (j = n2; j < 8 * ng2; j++) {
+                S[j] = S[n2 - 1];
+                T[j] = T[n2 - 1];
+            }
+            for (t = 0; t < 2; t++) {
+                if (!(t ? useT1 : useT0)) {
+                    continue;
+                }
+                if (ctx->hdF && f->sampnF[t] != NULL) {
+                    f->sampnF[t](&f->tF[t], S, T, tmp, ng2);
+                } else {
+                    f->sampn[t](&f->t[t], S, T, tmp, ng2);
+                }
+                for (li = 0; li < nl; li++) {
+                    const uint32x4_t v = vld1q_u32(tmp + 4 * li);
+                    const uint32x4x2_t z = vzipq_u32(v, v);
+                    vst1q_u32(txb[t] + 8 * li, z.val[0]);
+                    vst1q_u32(txb[t] + 8 * li + 4, z.val[1]);
+                }
+            }
+        } else if (useT0 || useT1) {
             float S[8 * NCH], T[8 * NCH];
             int t;
             /* amostrar so os pares (tex_meia): com filtro, sem teste de alfa/cobertura (as bordas recortadas ficam
