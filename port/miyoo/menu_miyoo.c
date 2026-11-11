@@ -242,6 +242,9 @@ static const Item k_items[] = {
     R(TAB_GFX, "retro_filter", "Retro filter", "Filtro retrô", 0, 2, 1),
     R(TAB_GFX, "retro_filter_strength", "Retro filter strength (%)", "Força do filtro retrô (%)", 25, 75, 5),
     T(TAB_GFX, "retro_filter_tv", "Retro filter: TV screen", "Filtro retrô: tela de TV"),
+    R(TAB_GFX, "screen_contrast", "Screen contrast", "Contraste da tela", -1, 20, 1),
+    R(TAB_GFX, "screen_hue", "Screen hue", "Matiz da tela", -1, 20, 1),
+    R(TAB_GFX, "screen_saturation", "Screen saturation", "Saturação da tela", -1, 20, 1),
     R(TAB_GFX, "max_resolution", "Maximum resolution (width)", "Resolução máxima (largura)", 320, 640, 32),
     R(TAB_GFX, "resolution_target_ms", "Dynamic resolution target (ms)", "Alvo da resolução dinâmica (ms)", 20, 40, 1),
     R(TAB_GFX, "dither", "Dithering", "Pontilhado de cor", 0, 2, 1),
@@ -810,7 +813,12 @@ static void change(const Item* it, int dir) {
     if (v == NULL || item_locked(it)) {
         return;
     }
-    if (it->min == 0 && it->max == 1) {
+    if (!strncmp(it->name, "screen_", 7)) {
+        /* cores da tela: de "sistema" (-1) qualquer lado comeca no valor do OnionOS; abaixo de 0 volta a "sistema" */
+        int miyoo_screen_sys(const char* name); /* (screen_miyoo.c) */
+        x = *v < 0 ? miyoo_screen_sys(it->name) : *v + dir;
+        x = x < 0 ? -1 : x > it->max ? it->max : x;
+    } else if (it->min == 0 && it->max == 1) {
         x = !*v;
     } else {
         int tries = 0;
@@ -1721,6 +1729,8 @@ static int draw_value(const Item* it, int y, int isSel) {
         circle((float)(bx + fill), (float)cy, 7.0f, locked ? TH(dim) : isSel ? TH(knob) : TH(fill), 255);
         if (v == offv) {
             snprintf(buf, sizeof buf, "%s", tr("off", "não"));
+        } else if (v < 0 && !strncmp(it->name, "screen_", 7)) {
+            snprintf(buf, sizeof buf, "%s", tr("system", "sistema")); /* (-1: o valor do OnionOS) */
         } else {
             snprintf(buf, sizeof buf, "%d", v);
         }

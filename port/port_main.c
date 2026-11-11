@@ -747,6 +747,12 @@ int main(int argc, char** argv) {
 #endif
 
     port_options_load("options.txt"); /* (antes do cartucho: as mensagens das telas saem na lingua escolhida) */
+#ifdef TARGET_MIYOO
+    {
+        void miyoo_screen_init(void); /* contraste, matiz e saturacao da tela (miyoo/screen_miyoo.c) */
+        miyoo_screen_init();
+    }
+#endif
     if (access(swapmap, R_OK) != 0) {
         char msg[300];
         snprintf(msg, sizeof msg, TR("The file %s is missing\nfrom the game folder.", "Falta o arquivo %s\nna pasta do jogo."), swapmap);

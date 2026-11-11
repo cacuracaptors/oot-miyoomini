@@ -2343,6 +2343,10 @@ static void release_mma(void) {
 }
 
 void miyoo_video_shutdown(void) {
+    {
+        void miyoo_screen_restore(void); /* (screen_miyoo.c: as cores da tela do sistema voltam) */
+        miyoo_screen_restore();
+    }
     if (flip_started) {
         struct timespec ts;
         pthread_mutex_lock(&flip_mx);

@@ -202,6 +202,11 @@ extern int gx_tex_meia; /* port/gfx/gfx_fast.inc: texturas ampliadas amostradas 
 int port_opt_lens_flare = 1;
 int port_opt_light_hit_marks = 1; /* marca de acerto recortada (z_eff_ss_hitmark.c, tools/oot-patch-soh.py) */ /* reflexo do sol na lente (z_kankyo.c, tools/oot-patch.py) */
 int port_opt_menu_theme = 1; /* cores do menu de opcoes (port/miyoo/menu_miyoo.c) */
+/* contraste, matiz e saturacao da tela, pelo ajuste de cor do chip (port/miyoo/screen_miyoo.c): 0..20 como no Tweaks
+ * do OnionOS; -1 = o do sistema */
+int port_opt_screen_contrast = -1;
+int port_opt_screen_hue = -1;
+int port_opt_screen_saturation = -1;
 extern int port_opt_perf_trace; /* port/perf_trace.c */            /* port/gfx/gfx_hook.c: registro quadro a quadro no log */
 extern int gx_hr_max_opt, gx_hr_alvo, gx_hr_texto, gx_retro, gx_retro_forca, gx_retro_tv; /* port/gfx/gfx_hires.c: resolucao maior (dinamica) */
 int port_opt_nucleos_fixos = 1;  /* desenho no nucleo 0, auxiliar do desenho no 1 */
@@ -552,6 +557,12 @@ static const struct {
       "retro filter: how much the scanlines (and the mask) darken, in % (25 to 75; 50 = default)" },
     { "Graphics", "retro_filter_tv", "", &gx_retro_tv,
       "retro filter: 1 = rounded corners and slightly darker edges, like a CRT TV screen; 0 = square picture" },
+    { "Graphics", "screen_contrast", "", &port_opt_screen_contrast,
+      "screen contrast, like Tweaks > Display in OnionOS (0 to 20); -1 = the system's. Only while the game runs; no performance cost" },
+    { "Graphics", "screen_hue", "", &port_opt_screen_hue,
+      "screen hue, like Tweaks > Display in OnionOS (0 to 20); -1 = the system's. Only while the game runs; no performance cost" },
+    { "Graphics", "screen_saturation", "", &port_opt_screen_saturation,
+      "screen color saturation, like Tweaks > Display in OnionOS (0 to 20); -1 = the system's. Only while the game runs; no performance cost" },
     { "Graphics", "retro_filter_brightness_base", "", &port_opt_retro_brightness_base,
       "(set by the game) brightness from before the retro filter was turned on in the menu, restored when it is turned off; -1 = none" },
     { "Graphics", "resolution_target_ms", "resolucao_alvo", &gx_hr_alvo,
@@ -943,6 +954,9 @@ static const struct {
     { "retro_filter_strength", 50 },
     { "retro_filter_tv", 1 },
     { "retro_filter_brightness_base", -1 },
+    { "screen_contrast", -1 },
+    { "screen_hue", -1 },
+    { "screen_saturation", -1 },
     { "resolution_target_ms", 30 },
     { "brightness", 0 },
     { "texture_filter", 1 },
