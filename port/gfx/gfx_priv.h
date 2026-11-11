@@ -57,6 +57,7 @@ void gx_ge_logo_mark(void);
 extern int gx_hr_le; /* opcao cor_direta (gfx_hires.c) */
 extern int gx_pontilhado; /* opcao pontilhado (gfx_tri.c) */
 void gx_tex_acct(int64_t delta); /* (gfx_rdp.c) memoria a mais/menos de uma textura na cache */
+void gx_premix_drop(void);      /* (gfx_fast.inc) a cache de texturas foi esvaziada: as misturas saem junto */
 extern int gx_logo_320; /* gfx_hires.c: o menu de pausa esta sendo desenhado neste desenho */
 
 /* LOD_FRACTION do combinador. O port nao calcula LOD: com 0, so a 1a textura aparecia (o portal azul dos chefes

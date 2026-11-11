@@ -534,6 +534,29 @@ static void premix_retire(GxTex *m) {
     g_pmRetGen[g_pmRi] = g_flushGen;
     g_pmRi = (g_pmRi + 1) % PREMIX_RETIRE;
 }
+/* a cache de texturas foi esvaziada (gx_tex_flush: o brilho mudou): as misturas saem junto. Elas foram feitas com as
+ * cores da curva antiga, e o filtro pre-calculado delas esta na conta da cache: liberadas depois que a conta ja tinha
+ * sido zerada, a conta passava por baixo de zero e virava ~4 GB (a cache achava que estava sempre cheia e jogava fora e
+ * refazia as texturas a cada quadro: o jogo ficava ~2x mais lento por varios segundos depois de mudar o brilho, ou de
+ * ligar o filtro retro, que muda o brilho; ceu do entardecer no campo de Hyrule, 11/2026). Chamado com a fila vazia. */
+void gx_premix_drop(void) {
+    int i;
+    for (i = 0; i < PREMIX_N; i++) {
+        if (g_pm[i].m != NULL) {
+            premix_free(g_pm[i].m);
+            free(g_pm[i].m);
+        }
+        memset(&g_pm[i], 0, sizeof g_pm[i]);
+    }
+    for (i = 0; i < PREMIX_RETIRE; i++) {
+        if (g_pmRetire[i] != NULL) {
+            premix_free(g_pmRetire[i]);
+            free(g_pmRetire[i]);
+            g_pmRetire[i] = NULL;
+        }
+    }
+    g_premixTx = NULL;
+}
 /* expoente de 2 da escala de uma tile (texels por unidade de S): shift 1..10 divide, 11..15 multiplica */
 static int shift_exp(int sh) {
     return sh == 0 ? 0 : sh <= 10 ? -sh : 16 - sh;

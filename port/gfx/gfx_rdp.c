@@ -134,7 +134,8 @@ GxTex *gx_hd_lookup(GxTex *tx, const GxTile *tl, const uint8_t *src, unsigned st
 int gx_hd_retry(GxTex *tx) __attribute__((weak));
 void gx_hd_free(GxTex *h) __attribute__((weak));
 void gx_tex_acct(int64_t delta) {
-    g_cacheBytes = (uint32_t)((int64_t)g_cacheBytes + delta);
+    const int64_t v = (int64_t)g_cacheBytes + delta;
+    g_cacheBytes = v < 0 ? 0u : (uint32_t)v; /* (nunca abaixo de zero: passava para ~4 GB e a cache esvaziava a cada quadro) */
 }
 
 static uint32_t tex_bytes(const GxTex *t) {
@@ -236,6 +237,7 @@ static inline uint32_t gamma_px(uint32_t px) {
 void gx_tex_flush(void) {
     int i;
     gx_batch_flush(); /* a fila pode usar estas texturas */
+    gx_premix_drop(); /* (as misturas tambem: a conta delas esta na da cache; gfx_fast.inc) */
     for (i = 0; i < g_ncache; i++) {
         tex_free(g_cache[i]);
     }
