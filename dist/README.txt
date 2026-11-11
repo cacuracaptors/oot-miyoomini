@@ -27,6 +27,9 @@ that the ROMs can be removed. Choose the language in Menu+Start > General >
 Language.
 To update the port to a new version, just replace the files: the game data
 stays on the SD card.
+Since v1.0.6 the port can also update itself: Menu+Start > General > Check
+for updates (with Wi-Fi on in OnionOS). Save the game in the pause menu
+before installing: save states don't carry over to a new version.
 
 CONTROLS
 --------
@@ -112,6 +115,8 @@ FILES
   saves/ .............. the game's save, save states
   idiomas/ ............ language packs
   log.txt ............. the game's log - please attach it to bug reports
+  version.txt ......... the installed version (for Check for updates)
+  cacert.pem .......... certificates for the update check (Mozilla, MPL-2.0)
 
 CREDITS
 -------
@@ -128,6 +133,7 @@ CREDITS
 - Audio microcode in C based on mupen64plus's HLE
 - Miyoo Mini toolchain by Shaun Inman
 - Options menu font: DejaVu Sans
+- Update check certificates: Mozilla's CA bundle (certifi), MPL-2.0
 - Original The Legend of Zelda: Ocarina of Time (1998) by Nintendo
 - Miyoo Mini Plus port by cacuracaptors
 

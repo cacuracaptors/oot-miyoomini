@@ -64,6 +64,8 @@ from your European ROM.
   game goes on from where it was
 - Separate music and sound effect volume
 - Restore defaults, and quit with an autosave
+- Check for updates (General): looks for a new version of the port on GitHub, shows what's new, downloads it with a
+  progress bar and installs it (Wi-Fi on in OnionOS). It also checks by itself once a day when the menu opens
 - Two color themes
 - Everything is also in `options.txt`, in the game folder
 
@@ -129,6 +131,9 @@ progress screen, and only happens once; then the European ROM, if it is there, g
 After that the ROMs can be removed from the folder. Choose the language in Menu+Start > General > Language.
 
 When you update the port to a new version, just replace the files: the game data stays on the SD card.
+
+Since v1.0.6 the port can also update itself: Menu+Start > General > Check for updates (with Wi-Fi on in
+OnionOS). Save the game in the pause menu before installing: save states don't carry over to a new version.
 
 ## Controls
 
@@ -210,6 +215,8 @@ This port cross-compiles for ARMv7 hard-float on Windows + WSL2, with the
 - Audio microcode in C based on mupen64plus's HLE
 - Miyoo Mini toolchain by Shaun Inman - https://github.com/shauninman/union-miyoomini-toolchain
 - Options menu font: DejaVu Sans - https://dejavu-fonts.github.io
+- Root certificates for the update check (`cacert.pem`): Mozilla's CA bundle, as packaged by certifi -
+  https://github.com/certifi/python-certifi
 - Original The Legend of Zelda: Ocarina of Time (1998) by Nintendo
 - Miyoo Mini Plus port by [cacuracaptors](https://github.com/cacuracaptors)
 
@@ -229,6 +236,7 @@ These parts come from other projects and keep their own terms; they are not cove
 - The audio and JPEG microcode in C (`port/audio/audio_hle.c`, `port/audio/audio_hle.h`, `port/jpeg_hle.c`), which
   follow mupen64plus's rsp-hle: GPL-2.0-or-later, like mupen64plus.
 - `port/inflate.c`, written after Mark Adler's puff.c (zlib license).
+- `dist/cacert.pem` (copied to the game folder), Mozilla's CA certificate bundle: MPL-2.0.
 - The menu and message fonts (`port/miyoo/font_menu.h`, `port/miyoo/font8x16.h`), rendered from DejaVu Sans
   (Bitstream Vera / DejaVu font license).
 - The fan translations (`idiomas/`) and the HD title logo textures (`texturas_hd.pak`, converted from Djipi's 3DS
