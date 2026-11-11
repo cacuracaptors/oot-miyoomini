@@ -198,6 +198,7 @@ extern int os_rt;               /* platform/os_core.c: threads do jogo, som e te
 extern int os_rt_draw;          /* platform/os_core.c: desenho em tempo real */
 extern int gx_slowcap_ms, gx_slowcap_after;       /* port/gfx/gfx_hook.c: grava quadros lentos */
 extern int gx_trace;
+extern int gx_hidden_stats; /* port/gfx/gfx_fast.inc: medicao dos triangulos escondidos no log */
 extern int port_opt_reload_overlays; /* port/ovl_reset.c */
 extern int gx_tex_meia; /* port/gfx/gfx_fast.inc: texturas ampliadas amostradas nos pixels pares */
 int port_opt_lens_flare = 1;
@@ -665,6 +666,8 @@ static const struct {
       "1 = detailed measurement of the CPU cores (what each thread does, where, and the time per function); SELECT+R1 saves perf_NN.bin (the last ~30 s), also saved when quitting; tools/oot-perf-report.py turns it into a page. Costs a little CPU: leave 0 when just playing" },
     { "Diagnostics", "frame_trace", "registro_quadros", &gx_trace,
       "1 = every draw and every image shown becomes a [q] line in log.txt (per-frame timings), 0 = off" },
+    { "Diagnostics", "hidden_stats", "", &gx_hidden_stats,
+      "1 = every 3 s an [oculto] line in log.txt: how many triangles end up fully hidden behind what was already drawn and how much drawing time they take (measuring costs a little CPU), 0 = off" },
     { "Diagnostics", "slow_capture_ms", "captura_lenta", &gx_slowcap_ms,
       "N = save (lento_NN.cap) the frame after one that took more than N ms to draw; 0 = off" },
     { "Diagnostics", "slow_capture_after", "captura_inicio", &gx_slowcap_after,
@@ -1010,6 +1013,7 @@ static const struct {
     { "reload_overlays", 1 },
     { "perf_trace", 0 },
     { "frame_trace", 0 },
+    { "hidden_stats", 0 },
     { "slow_capture_ms", 0 },
     { "slow_capture_after", 0 },
 };

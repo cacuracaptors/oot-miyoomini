@@ -174,6 +174,12 @@ typedef struct {
     int covW, covR; /* fundo adiado: marcar os pixels escritos / desenhar so onde nada escreveu */
     int hdF;        /* trabalho com a textura nova ampliada: usa a versao com filtro (tF/sampnF) */
     const uint8_t *own; /* dono de cada par de linhas (NULL = g_own); muda quando a principal pega linhas */
+    /* medicao (opcao hidden_stats): grupos de 8 pixels que passaram pelo teste de z / que sobraram vivos, e a soma
+     * por tipo de triangulo desta thread: [0] todos, [1] escondidos inteiros (nenhum grupo vivo), [2] sem linha desta
+     * thread ou recusados na montagem, [3] programas fora do caminho fundido (nao contam grupos) */
+    uint32_t mG, mL;
+    uint64_t mT[4];
+    uint32_t mN[4], mGs[2], mLs;
 } FastCtx;
 
 static FastProg g_fp;
@@ -3173,6 +3179,8 @@ static inline __attribute__((always_inline)) void span_fused_tpl(const GxPrim *p
             case 2: nl = zph_tpl(&sc, xc, ng, mk, zn, live, 1, 1, 0, 0); break;
             default: nl = zph_tpl(&sc, xc, ng, mk, zn, live, 1, 1, 1, 0); break;
         }
+        ctx->mG += (uint32_t)ng; /* (medicao hidden_stats) */
+        ctx->mL += (uint32_t)nl;
         if (nl == 0) {
             continue;
         }
@@ -4446,15 +4454,66 @@ static void run_bg(FastCtx *ctx, int band, int nb, const GxJob *e) {
     }
 }
 
+/* medicao (opcao hidden_stats, Diagnostics): quanto do desenho vai em triangulos que acabam inteiros atras do que ja
+ * estava na tela (nenhum grupo de 8 pixels passa no teste de z): a montagem e as leituras do z deles sao o que um
+ * teste de z por blocos pouparia. Cada triangulo e medido com o relogio (custa um pouco: so para medir). */
+int gx_hidden_stats = 0;
+static uint64_t fast_now_ns(void);
+static void hid_print(void) {
+    static uint64_t last;
+    static unsigned flushes;
+    const uint64_t now = fast_now_ns();
+    uint64_t t[4] = { 0, 0, 0, 0 };
+    uint32_t n[4] = { 0, 0, 0, 0 }, g[2] = { 0, 0 }, l = 0;
+    int c, k;
+    flushes++;
+    if (last == 0) {
+        last = now;
+    }
+    if (now - last < 3000000000ull) {
+        return;
+    }
+    for (c = 0; c < 2; c++) {
+        for (k = 0; k < 4; k++) {
+            t[k] += g_ctx[c].mT[k];
+            n[k] += g_ctx[c].mN[k];
+            g_ctx[c].mT[k] = 0;
+            g_ctx[c].mN[k] = 0;
+        }
+        g[0] += g_ctx[c].mGs[0];
+        g[1] += g_ctx[c].mGs[1];
+        l += g_ctx[c].mLs;
+        g_ctx[c].mGs[0] = g_ctx[c].mGs[1] = g_ctx[c].mLs = 0;
+    }
+    fprintf(stderr,
+            "[oculto] %.1f s, %u desenhos | triangulos (por thread) %u em %.0f ms | escondidos inteiros %u (%.0f%%) em "
+            "%.0f ms (%.1f%% do tempo), %u grupos | sem linha/recusados %u em %.0f ms | fora do fundido %u em %.0f ms | "
+            "grupos de 8 px: %u testados, %u mortos (%.0f%%), dos mortos %.0f%% em triangulos escondidos inteiros\n",
+            (double)(now - last) / 1e9, flushes, n[0], (double)t[0] / 1e6, n[1], n[0] ? 100.0 * n[1] / n[0] : 0.0,
+            (double)t[1] / 1e6, t[0] ? 100.0 * (double)t[1] / (double)t[0] : 0.0, g[1], n[2], (double)t[2] / 1e6, n[3],
+            (double)t[3] / 1e6, g[0], g[0] - l, g[0] ? 100.0 * (g[0] - l) / g[0] : 0.0,
+            g[0] - l ? 100.0 * g[1] / (g[0] - l) : 0.0);
+    last = now;
+    flushes = 0;
+}
+
 static void run_jobs(FastCtx *ctx, int band, int nb, int i0, int i1) {
     int i, y;
+    const int med = gx_hidden_stats;
     for (i = i0; i < i1; i++) {
         const GxJob *j = &g_jobs[g_ord[i]];
         const uint8_t *own;
+        uint64_t mt0 = 0;
+        uint32_t mg0 = 0, ml0 = 0;
         steal_check(ctx, band, nb, i);
         own = ctx->own ? ctx->own : g_own;
         if (j->flags & JOBF_DEFER) {
             continue;
+        }
+        if (med && j->kind == JOB_TRI) {
+            mt0 = fast_now_ns();
+            mg0 = ctx->mG;
+            ml0 = ctx->mL;
         }
         ctx->covW = (j->flags & JOBF_COVW) != 0;
         ctx->hdF = (j->flags & JOBF_HDF) != 0;
@@ -4542,6 +4601,22 @@ static void run_jobs(FastCtx *ctx, int band, int nb, int i0, int i1) {
                     }
                 }
                 break;
+            }
+        }
+        if (med && j->kind == JOB_TRI) {
+            const uint64_t dt = fast_now_ns() - mt0;
+            const uint32_t dg = ctx->mG - mg0, dl = ctx->mL - ml0;
+            const int k = dg != 0 ? (dl == 0 ? 1 : 0) : g_progs[j->prog].fused ? 2 : 3;
+            ctx->mT[0] += dt;
+            ctx->mN[0]++;
+            if (k != 0) {
+                ctx->mT[k] += dt;
+                ctx->mN[k]++;
+            }
+            ctx->mGs[0] += dg;
+            ctx->mLs += dl;
+            if (k == 1) {
+                ctx->mGs[1] += dg;
             }
         }
     }
@@ -4843,6 +4918,9 @@ void gx_batch_flush(void) {
         run_jobs(&g_ctx[0], 0, 1, 0, g_nJobs);
         PT_EV(PT_DRAW_RASTER + 1, 0);
         gx_raster_ns += fast_now_ns() - t0;
+    }
+    if (gx_hidden_stats) {
+        hid_print();
     }
     g_nJobs = 0;
     g_nProgs = 0;
