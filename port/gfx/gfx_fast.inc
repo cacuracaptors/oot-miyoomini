@@ -466,27 +466,12 @@ int gx_ceu_mistura = 1;
  * textura 4x maior; replay --sem-mistura-desliza / --mistura-desliza N). */
 int gx_cc_alias = 1; /* (lote 190: 1o ciclo que so copia uma entrada lido direto pelo 2o; replay --sem-alias) */
 int gx_mistura_desliza = 2; /* (padrao 2 desde o lote 188: medido no lago Hylia, 384 -> 416 com o mesmo tempo) */
-/* Lote 242: as paredes e o chao do Dominio Zora (e partes do lago Hylia) misturam 2 texturas do mesmo jeito, mas uma
- * delas trava em T (nao repete na vertical: clamp) e a mistura era recusada: 74% do tempo do desenho la ia em pixels
- * lendo 2 texturas. A mistura vale quando a textura que trava ocupa a grade inteira naquele eixo (e, se for a 2a,
- * sem deslocamento): a textura misturada trava tambem. Dentro da faixa da textura o resultado e o mesmo de antes;
- * fora dela (malha que passa do fim da textura travada) a camada que deslizava fica parada junto com a travada.
- * Opcao gx_mistura_trava (options.txt premix_clamped). */
-/* Lote 244: desligada por padrao. Na medicao com quadros capturados ela era 10% mais rapida no Dominio Zora, mas
- * la o mesmo quadro e repetido e a textura misturada fica guardada; no jogo de verdade a agua das paredes desliza a
- * cada quadro, a mistura e refeita sempre (cerca de 1 ms por desenho) e o ganho sumiu (resolucao igual ou menor). */
-int gx_mistura_trava = 0;
-/* Lote 245: medido no aparelho (Dominio Zora, com premix_clamped): as texturas misturadas mudam a cada quadro e o
- * filtro rapido delas (tex_prefilter) e refeito toda vez, na thread principal: 5% dela, e a auxiliar ficava esperando.
- * 0 = as texturas misturadas usam o filtro exato (sem preparo); 1 = o filtro rapido, como antes. */
-int gx_mistura_filtro = 1;
 typedef struct {
     int sizeS, sizeT;   /* textura misturada */
     int raS, raT;       /* passo da 1a textura por texel da grade, em 1/64 de texel (64 = mesma grade) */
     int rbS, rbT;       /* idem, 2a */
     int obS, obT;       /* posicao da 2a no texel 0 da grade, em 1/64 de texel (0 .. 64*w-1) */
     GxTile tile;        /* tile da textura misturada (no lugar da tile da 1a) */
-    int clampT;         /* a textura misturada trava em T: bit 0 = a 1a trava, bit 1 = a 2a (lote 242) */
 } PremixGeo;
 static PremixGeo g_pmGeo;
 #define PREMIX_MAX 128 /* lado maximo da textura misturada (opcao 2) */
@@ -594,9 +579,7 @@ static int ilog2i(int v) {
  * monta a grade da mistura e a tile dela. 0 = nao da (grande demais, escalas muito diferentes, ...) */
 static int premix_geo(const GxTex *A, const GxTex *B, const GxTile *ta, const GxTile *tb, PremixGeo *g) {
     int ax;
-    const int clT = gx_mistura_trava ? (ta->cmt == 2 ? 1 : 0) | (tb->cmt == 2 ? 2 : 0) : 0; /* (2 = trava) */
-    g->clampT = 0;
-    if (ta->cms || (ta->cmt && !(clT & 1)) || tb->cms || (tb->cmt && !(clT & 2)) || !ta->masks || !ta->maskt || !tb->masks || !tb->maskt ||
+    if (ta->cms || ta->cmt || tb->cms || tb->cmt || !ta->masks || !ta->maskt || !tb->masks || !tb->maskt ||
         (1 << ta->masks) != A->w || (1 << ta->maskt) != A->h || (1 << tb->masks) != B->w || (1 << tb->maskt) != B->h ||
         A->clipw != A->w || A->cliph != A->h || B->clipw != B->w || B->cliph != B->h) {
         return 0;
@@ -619,12 +602,6 @@ static int premix_geo(const GxTex *A, const GxTex *B, const GxTile *ta, const Gx
         if (size < 8 || size > (gx_mistura_desliza >= 2 ? PREMIX_MAX : 64)) {
             return 0;
         }
-        if (ax && clT) {
-            /* a que trava tem de ocupar a grade inteira (a outra repete dentro dela); a 2a, sem deslocamento */
-            if (((clT & 1) && na != size) || ((clT & 2) && (nb != size || ((ulA << (ge - eA)) & (4 * size - 1)) * rb != 64 * ulB))) {
-                return 0;
-            }
-        }
         /* grade: u = S*2^ge - ulM/4. Com ulM = ulA * 2^(ge-eA) a 1a fica em u * ra/64 (reduzido ao periodo, que e
          * multiplo dos dois). A 2a fica em (u + ulM/4) * rb/64 - ulB/4: em 1/64 de texel, u*rb + (ulM*rb - 64*ulB)/4 */
         ulM = (ulA << (ge - eA)) & (4 * size - 1);
@@ -638,9 +615,7 @@ static int premix_geo(const GxTex *A, const GxTex *B, const GxTile *ta, const Gx
             g->tile.shifts = (uint8_t)exp_shift(ge); g->tile.masks = (uint8_t)ilog2i(size); g->tile.uls = (uint16_t)ulM;
         }
     }
-    g->tile.cms = 0;
-    g->tile.cmt = clT ? 2 : 0;
-    g->clampT = clT;
+    g->tile.cms = g->tile.cmt = 0;
     return 1;
 }
 
@@ -669,10 +644,9 @@ static void premix_lerp8(uint8_t *o, const uint8_t *a, const uint8_t *b, int wa,
  * posicoes oS + x * rS (1/64 de texel; rS = 64, 32 ou 16) da linha posT, linear entre os vizinhos. Primeiro a linha
  * da textura (vertical), repetida o bastante para nao dar a volta; depois, para cada fase x % k (k = 64 / rS), uma
  * mistura de texels seguidos com a mesma fracao; as fases sao intercaladas na saida. */
-static void premix_row(const uint8_t *px, int w, int h, int oS, int rS, int posT, int n, uint8_t *out, int clampT) {
+static void premix_row(const uint8_t *px, int w, int h, int oS, int rS, int posT, int n, uint8_t *out) {
     static uint8_t ext[(PREMIX_MAX * 3 + 4) * 4] __attribute__((aligned(16))), ph[(PREMIX_MAX + 4) * 4] __attribute__((aligned(16))); /* (so a thread que monta a fila chama) */
-    /* (clampT: a camada trava em T, a ultima linha nao mistura com a primeira) */
-    const int y0 = (posT >> 6) & (h - 1), y1 = clampT && y0 == h - 1 ? y0 : (y0 + 1) & (h - 1), ft = posT & 63;
+    const int y0 = (posT >> 6) & (h - 1), y1 = (y0 + 1) & (h - 1), ft = posT & 63;
     const int k = 64 / rS, m = n / k, L = w + m + 2;
     int t, p;
     if (ft == 0) {
@@ -709,8 +683,7 @@ static GxTex *premix_get(const GxTex *A, const GxTex *B, int v, PremixGeo *pg) {
     const uint64_t geo = pg == NULL ? 0
                          : (((uint64_t)(uint32_t)pg->obS << 40) ^ ((uint64_t)(uint32_t)pg->obT << 20) ^
                             (uint64_t)(uint32_t)(pg->sizeS << 12 | pg->sizeT << 4) ^
-                            ((uint64_t)(uint32_t)(pg->raS ^ pg->raT << 7 ^ pg->rbS << 14 ^ pg->rbT << 21) << 30) ^
-                            ((uint64_t)(uint32_t)pg->clampT << 61)) | 1;
+                            ((uint64_t)(uint32_t)(pg->raS ^ pg->raT << 7 ^ pg->rbS << 14 ^ pg->rbT << 21) << 30)) | 1;
     const uint32_t shape = pg == NULL ? 0
                            : (uint32_t)(pg->sizeS << 24 ^ pg->sizeT << 16 ^ pg->raS << 12 ^ pg->raT << 8 ^ pg->rbS << 4 ^
                                         pg->rbT) | 1u;
@@ -770,12 +743,12 @@ static GxTex *premix_get(const GxTex *A, const GxTex *B, int v, PremixGeo *pg) {
         int y;
         const uint64_t t0 = gx_now_ns();
         for (y = 0; y < pg->sizeT; y++) {
-            premix_row(pa, A->w, A->h, 0, pg->raS, y * pg->raT, pg->sizeS, la, pg->clampT & 1);
-            premix_row(pb, B->w, B->h, pg->obS, pg->rbS, pg->obT + y * pg->rbT, pg->sizeS, lb, pg->clampT & 2);
+            premix_row(pa, A->w, A->h, 0, pg->raS, y * pg->raT, pg->sizeS, la);
+            premix_row(pb, B->w, B->h, pg->obS, pg->rbS, pg->obT + y * pg->rbT, pg->sizeS, lb);
             premix_lerp8(pm + (size_t)4 * y * pg->sizeS, la, lb, 256 - v, v, 8, 4 * pg->sizeS);
         }
         /* a copia com borda (tex_pad, modo repete nos dois eixos) ja pronta, com memcpy: tex_pad faria texel a texel */
-        if (!pg->clampT) { /* (travada em T: a copia com borda e feita por tex_pad, no modo da tile) */
+        {
             const int W = pg->sizeS, H = pg->sizeT, pw = W + 2;
             uint32_t *pp = (uint32_t *)malloc((size_t)pw * (size_t)(H + 2) * 4u);
             if (pp != NULL) {
@@ -2399,9 +2372,7 @@ static void fused_check(FastProg *f) {
                 ok = 0;
             } else {
                 f->sampn[k] = g_sampn[f->bilerp && !f->t[k].hdPoint ? 1 : 0][f->t[k].modeS == 2][f->t[k].modeT == 2];
-                if (gx_tex_prefilter && f->bilerp && !f->t[k].hdPoint &&
-                    (gx_mistura_filtro || g_premixTx == NULL || f->t[k].tx != g_premixTx) &&
-                    tex_prefilter(&f->t[k])) {
+                if (gx_tex_prefilter && f->bilerp && !f->t[k].hdPoint && tex_prefilter(&f->t[k])) {
                     f->sampn[k] = g_sampf[f->t[k].pfs >= 1 && f->t[k].pfs <= 3 ? f->t[k].pfs : 1][f->t[k].modeS == 2][f->t[k].modeT == 2];
                     if (gx_filtro_exato_perto > 0) {
                         /* de perto: o filtro exato da mesma textura (hd_close decide por triangulo) */
