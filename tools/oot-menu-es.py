@@ -60,6 +60,8 @@ ES = {
                         "Activado: suena la alarma de vida baja, como en el original. Desactivado: sin alarma."),
     "disable_crit_wiggle": ("Sin temblor con vida baja",
                             "Activado: la cámara no tiembla al azar cuando queda poca vida."),
+    "camera_distance": ("Distancia de la cámara (%)",
+                 "Distancia de la cámara que sigue a Link (caminar, Z, saltar, nadar, apuntar), en % de la original: 70 = más cerca, 130 = más lejos. Las cinemáticas y las cámaras fijas de algunas salas quedan como en el original. Más lejos muestra más escenario (un poco más de trabajo de dibujo). Se aplica cuando la cámara cambia de modo (parar, correr, Z...)."),
     "remember_save_location": ("Recordar dónde guardaste",
                                "Activado: al cargar la partida, Link empieza en la última entrada por la que pasó (no en grutas ni fuentes de hadas; las mazmorras funcionan como en el original). Desactivado: como el original (casa de Link / Templo del Tiempo)."),
     "gs_token_count": ("Contar Skulltulas Doradas",

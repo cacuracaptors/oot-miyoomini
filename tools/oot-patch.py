@@ -1005,6 +1005,53 @@ patch_file("src/code/z_camera.c", [
      "        if (!({ extern int port_opt_sem_tremor; port_opt_sem_tremor; }) && /* port */\n"
      "            gSaveContext.save.info.playerData.health <= 16 && ((camera->play->state.frames % 256) == 0)) {\n"),
 ])
+# distancia da camera (opcao camera_distance, 70..130%): so as cameras que seguem o Link no jogo (andar, Z sem alvo,
+# pular/escalar, nadar, mirar num inimigo), e so a camera principal fora de cenas: as tomadas das cenas, das portas e
+# baus e as cameras fixas das salas usam outras funcoes ou a camera auxiliar e ficam como no original. Vale quando a
+# camera recarrega os parametros (ao mudar de modo: parar, correr, mirar...).
+patch_file("src/code/z_camera.c", [
+    ("distancia: fator",
+     "#define RELOAD_PARAMS(camera) (camera->animState == 0 || camera->animState == 10 || camera->animState == 20)\n",
+     "#define RELOAD_PARAMS(camera) (camera->animState == 0 || camera->animState == 10 || camera->animState == 20)\n"
+     "/* port: opcao camera_distance (% da distancia original), so na camera principal fora de cenas */\n"
+     "static f32 Port_CamDist(Camera* camera) {\n"
+     "    extern int port_opt_camera_distance;\n"
+     "    const int pc = port_opt_camera_distance < 70 ? 70 : port_opt_camera_distance > 130 ? 130 : port_opt_camera_distance;\n"
+     "    if (pc == 100 || camera->camId != CAM_ID_MAIN || camera->play->csCtx.state != CS_STATE_IDLE) {\n"
+     "        return 1.0f;\n"
+     "    }\n"
+     "    return pc * 0.01f;\n"
+     "}\n"),
+    ("distancia: Normal1",
+     "        roData->distMin = GET_NEXT_RO_DATA(values) * sp94;\n        roData->distMax = GET_NEXT_RO_DATA(values) * sp94;\n",
+     "        roData->distMin = GET_NEXT_RO_DATA(values) * sp94 * Port_CamDist(camera); /* port */\n"
+     "        roData->distMax = GET_NEXT_RO_DATA(values) * sp94 * Port_CamDist(camera);\n"),
+    ("distancia: Normal3",
+     "        roData->distMin = GET_NEXT_RO_DATA(values) * CAM_DATA_SCALED(playerHeight);\n"
+     "        roData->distMax = GET_NEXT_RO_DATA(values) * CAM_DATA_SCALED(playerHeight);\n",
+     "        roData->distMin = GET_NEXT_RO_DATA(values) * CAM_DATA_SCALED(playerHeight) * Port_CamDist(camera); /* port */\n"
+     "        roData->distMax = GET_NEXT_RO_DATA(values) * CAM_DATA_SCALED(playerHeight) * Port_CamDist(camera);\n"),
+    ("distancia: Parallel1",
+     "        roData->distTarget = GET_NEXT_SCALED_RO_DATA(values) * playerHeight * yNormal;\n",
+     "        roData->distTarget = GET_NEXT_SCALED_RO_DATA(values) * playerHeight * yNormal * Port_CamDist(camera); /* port */\n"),
+    ("distancia: Jump1",
+     "        roData->distMin = CAM_DATA_SCALED(GET_NEXT_RO_DATA(values)) * playerHeight * yNormal;\n"
+     "        roData->distMax = CAM_DATA_SCALED(GET_NEXT_RO_DATA(values)) * playerHeight * yNormal;\n",
+     "        roData->distMin = CAM_DATA_SCALED(GET_NEXT_RO_DATA(values)) * playerHeight * yNormal * Port_CamDist(camera); /* port */\n"
+     "        roData->distMax = CAM_DATA_SCALED(GET_NEXT_RO_DATA(values)) * playerHeight * yNormal * Port_CamDist(camera);\n"),
+    ("distancia: Jump2",
+     "        roData->minDist = GET_NEXT_SCALED_RO_DATA(values) * playerHeight * yNormal;\n"
+     "        roData->maxDist = GET_NEXT_SCALED_RO_DATA(values) * playerHeight * yNormal;\n",
+     "        roData->minDist = GET_NEXT_SCALED_RO_DATA(values) * playerHeight * yNormal * Port_CamDist(camera); /* port */\n"
+     "        roData->maxDist = GET_NEXT_SCALED_RO_DATA(values) * playerHeight * yNormal * Port_CamDist(camera);\n"),
+    ("distancia: Jump3",
+     "        roData->distMin = GET_NEXT_RO_DATA(values) * t2;\n        roData->distMax = GET_NEXT_RO_DATA(values) * t2;\n",
+     "        roData->distMin = GET_NEXT_RO_DATA(values) * t2 * Port_CamDist(camera); /* port */\n"
+     "        roData->distMax = GET_NEXT_RO_DATA(values) * t2 * Port_CamDist(camera);\n"),
+    ("distancia: Battle1",
+     "        roData->distance = GET_NEXT_RO_DATA(values);\n",
+     "        roData->distance = GET_NEXT_RO_DATA(values) * Port_CamDist(camera); /* port */\n"),
+])
 patch_file("src/code/z_demo.c", [
     ("pular cena com START",
      "        (DEBUG_FEATURES && (csCtx->curFrame > 20) && CHECK_BTN_ALL(play->state.input[0].press.button, BTN_START) &&\n",

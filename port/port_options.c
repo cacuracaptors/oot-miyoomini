@@ -20,6 +20,7 @@ int port_opt_segurar_b = 1;    /* segurar B passa os textos rapido */
 int port_opt_pular_cenas = 1;  /* START pula as cenas */
 int port_opt_alarme_vida = 1;  /* bipe de vida baixa */
 int port_opt_sem_tremor = 0;   /* camera nao "treme" com vida baixa (SoH DisableCritWiggle) */
+int port_opt_camera_distance = 100; /* distancia da camera que segue o Link, em % (70..130; z_camera.c) */
 int port_opt_autosave = 10;   /* SoH: salvar sozinho a cada N minutos (0 = desligado) */
 int port_opt_text_speed = 2; /* SoH: letras por quadro no texto (1 = original) */
 /* volume da musica (sequencias da musica, das fanfarras e dos sons de ambiente) e dos efeitos, em % do original */
@@ -341,6 +342,8 @@ static const struct {
       "1 = low health beep (like the original), 0 = no beep" },
     { "Enhancements", "disable_crit_wiggle", "sem_tremor", &port_opt_sem_tremor,
       "1 = the camera does not wiggle randomly at low health" },
+    { "Enhancements", "camera_distance", "", &port_opt_camera_distance,
+      "distance of the camera that follows Link, in % of the original: 70 = closer, 130 = farther (cutscenes and fixed room cameras stay as in the original). 100 = original" },
     /* Ship of Harkinian enhancements (Enhancements > Quality) */
     { "Enhancements", "remember_save_location", "", &port_opt_remember_save_location,
       "1 = when loading a save, Link starts at the last entrance he went through (not in grottos or fairy fountains; dungeons work as in the original); 0 = like the original (Link's house / Temple of Time)" },
@@ -836,6 +839,7 @@ static const struct {
     { "enemy_health_bar", 0 },
     { "low_health_beep", 1 },
     { "disable_crit_wiggle", 0 },
+    { "camera_distance", 100 },
     { "remember_save_location", 0 },
     { "gs_token_count", 0 },
     { "heart_piece_count", 0 },

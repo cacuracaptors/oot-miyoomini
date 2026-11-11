@@ -64,6 +64,8 @@ IT = {
                         "Attivo: l'allarme di vita bassa suona, come nell'originale. Disattivo: senza allarme."),
     "disable_crit_wiggle": ("Niente tremolio a vita bassa",
                             "Attivo: la telecamera non trema da sola quando la vita è bassa."),
+    "camera_distance": ("Distanza della telecamera (%)",
+                 "Distanza della telecamera che segue Link (camminata, Z, salto, nuoto, mira), in % dell'originale: 70 = più vicina, 130 = più lontana. Le scene e le telecamere fisse di alcune stanze restano come nell'originale. Più lontana mostra più scenario (un po' più di lavoro di disegno). Vale quando la telecamera cambia modalità (fermarsi, correre, Z...)."),
     "remember_save_location": ("Ricordare il luogo del salvataggio",
                                "Attivo: caricando la partita, Link comincia dall'ultimo ingresso attraversato (dungeon come l'originale). Disattivo: comincia a casa o al Tempio del Tempo, come l'originale."),
     "gs_token_count": ("Contatore Skulltula d'oro",

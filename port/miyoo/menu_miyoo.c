@@ -120,6 +120,7 @@ static const Item k_items[] = {
     T(TAB_ENH, "enemy_health_bar", "Enemy health bar", "Barra de vida do inimigo"),
     T(TAB_ENH, "low_health_beep", "Low health beep", "Alarme de vida baixa"),
     T(TAB_ENH, "disable_crit_wiggle", "No camera wiggle at low health", "Sem tremor com vida baixa"),
+    R(TAB_ENH, "camera_distance", "Camera distance (%)", "Distância da câmera (%)", 70, 130, 5),
     T(TAB_ENH, "remember_save_location", "Remember save location", "Lembrar onde salvou"),
     T(TAB_ENH, "gs_token_count", "Gold Skulltula count", "Contagem de Skulltulas"),
     T(TAB_ENH, "heart_piece_count", "Piece of Heart count", "Contagem de pedaços de coração"),
