@@ -1021,16 +1021,35 @@ patch_file("src/code/z_camera.c", [
      "        return 1.0f;\n"
      "    }\n"
      "    return pc * 0.01f;\n"
+     "}\n"
+     "/* port: nas cameras que mantem a distancia em que estao (entre a minima e a maxima: andar, Z, nadar), o fator\n"
+     " * muda aos poucos (~0,5 s) e a distancia atual vai junto: sem isso, aumentar a opcao (ou voltar de 70 para 100)\n"
+     " * nao afastava a camera, porque o jogo so a empurra quando passa dos limites */\n"
+     "static f32 sPortCamF = 1.0f;\n"
+     "static f32 Port_CamDistStep(Camera* camera, f32* r) {\n"
+     "    f32 t, nf;\n"
+     "    if (camera->camId != CAM_ID_MAIN) {\n"
+     "        return 1.0f;\n"
+     "    }\n"
+     "    t = Port_CamDist(camera);\n"
+     "    nf = sPortCamF < t ? (sPortCamF + 0.03f < t ? sPortCamF + 0.03f : t)\n"
+     "                       : (sPortCamF - 0.03f > t ? sPortCamF - 0.03f : t);\n"
+     "    *r *= nf / sPortCamF;\n"
+     "    camera->dist *= nf / sPortCamF;\n"
+     "    sPortCamF = nf;\n"
+     "    return nf;\n"
      "}\n"),
     ("distancia: Normal1",
-     "        roData->distMin = GET_NEXT_RO_DATA(values) * sp94;\n        roData->distMax = GET_NEXT_RO_DATA(values) * sp94;\n",
-     "        roData->distMin = GET_NEXT_RO_DATA(values) * sp94 * Port_CamDist(camera); /* port */\n"
-     "        roData->distMax = GET_NEXT_RO_DATA(values) * sp94 * Port_CamDist(camera);\n"),
+     "    camera->dist = eyeAdjustment.r =\n"
+     "        Camera_ClampDist(camera, eyeAdjustment.r, roData->distMin, roData->distMax, rwData->unk_28);\n",
+     "    { const f32 pf = Port_CamDistStep(camera, &eyeAdjustment.r); /* port */\n"
+     "    camera->dist = eyeAdjustment.r =\n"
+     "        Camera_ClampDist(camera, eyeAdjustment.r, roData->distMin * pf, roData->distMax * pf, rwData->unk_28); }\n"),
     ("distancia: Normal3",
-     "        roData->distMin = GET_NEXT_RO_DATA(values) * CAM_DATA_SCALED(playerHeight);\n"
-     "        roData->distMax = GET_NEXT_RO_DATA(values) * CAM_DATA_SCALED(playerHeight);\n",
-     "        roData->distMin = GET_NEXT_RO_DATA(values) * CAM_DATA_SCALED(playerHeight) * Port_CamDist(camera); /* port */\n"
-     "        roData->distMax = GET_NEXT_RO_DATA(values) * CAM_DATA_SCALED(playerHeight) * Port_CamDist(camera);\n"),
+     "    camera->dist = sp84.r = Camera_ClampDist(camera, sp84.r, roData->distMin, roData->distMax, rwData->distTimer);\n",
+     "    { const f32 pf = Port_CamDistStep(camera, &sp84.r); /* port */\n"
+     "    camera->dist = sp84.r =\n"
+     "        Camera_ClampDist(camera, sp84.r, roData->distMin * pf, roData->distMax * pf, rwData->distTimer); }\n"),
     ("distancia: Parallel1",
      "        roData->distTarget = GET_NEXT_SCALED_RO_DATA(values) * playerHeight * yNormal;\n",
      "        roData->distTarget = GET_NEXT_SCALED_RO_DATA(values) * playerHeight * yNormal * Port_CamDist(camera); /* port */\n"),
@@ -1045,9 +1064,11 @@ patch_file("src/code/z_camera.c", [
      "        roData->minDist = GET_NEXT_SCALED_RO_DATA(values) * playerHeight * yNormal * Port_CamDist(camera); /* port */\n"
      "        roData->maxDist = GET_NEXT_SCALED_RO_DATA(values) * playerHeight * yNormal * Port_CamDist(camera);\n"),
     ("distancia: Jump3",
-     "        roData->distMin = GET_NEXT_RO_DATA(values) * t2;\n        roData->distMax = GET_NEXT_RO_DATA(values) * t2;\n",
-     "        roData->distMin = GET_NEXT_RO_DATA(values) * t2 * Port_CamDist(camera); /* port */\n"
-     "        roData->distMax = GET_NEXT_RO_DATA(values) * t2 * Port_CamDist(camera);\n"),
+     "    camera->dist = eyeDiffGeo.r =\n"
+     "        Camera_ClampDist(camera, eyeDiffGeo.r, roData->distMin, roData->distMax, rwData->animTimer);\n",
+     "    { const f32 pf = Port_CamDistStep(camera, &eyeDiffGeo.r); /* port */\n"
+     "    camera->dist = eyeDiffGeo.r =\n"
+     "        Camera_ClampDist(camera, eyeDiffGeo.r, roData->distMin * pf, roData->distMax * pf, rwData->animTimer); }\n"),
     ("distancia: Battle1",
      "        roData->distance = GET_NEXT_RO_DATA(values);\n",
      "        roData->distance = GET_NEXT_RO_DATA(values) * Port_CamDist(camera); /* port */\n"),

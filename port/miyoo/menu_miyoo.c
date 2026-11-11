@@ -772,6 +772,8 @@ static void retro_brightness(int from, int to) {
     fprintf(stderr, "menu: filtro retro %d -> %d: brilho %d\n", from, to, gx_brilho);
 }
 
+int miyoo_screen_sys(const char* name); /* (screen_miyoo.c) o valor do OnionOS, 0..20 */
+
 static void change(const Item* it, int dir) {
     int* v;
     int x;
@@ -815,10 +817,14 @@ static void change(const Item* it, int dir) {
         return;
     }
     if (!strncmp(it->name, "screen_", 7)) {
-        /* cores da tela: de "sistema" (-1) qualquer lado comeca no valor do OnionOS; abaixo de 0 volta a "sistema" */
-        int miyoo_screen_sys(const char* name); /* (screen_miyoo.c) */
-        x = *v < 0 ? miyoo_screen_sys(it->name) : *v + dir;
-        x = x < 0 ? -1 : x > it->max ? it->max : x;
+        /* cores da tela: "sistema" (-1) fica na barra no valor do OnionOS e anda dele para os lados; voltar ao valor
+         * do OnionOS e voltar a "sistema" (lote 237; antes "sistema" ficava abaixo do 0, no comeco da barra) */
+        const int sys = miyoo_screen_sys(it->name);
+        x = (*v < 0 ? sys : *v) + dir;
+        x = x < 0 ? 0 : x > it->max ? it->max : x;
+        if (x == sys) {
+            x = -1;
+        }
     } else if (it->min == 0 && it->max == 1) {
         x = !*v;
     } else {
@@ -1719,6 +1725,10 @@ static int draw_value(const Item* it, int y, int isSel) {
         /* numero com barra fina e bolinha */
         const int bw = 104, bx = VAL_X1 - 60 - bw;
         int fill = it->max > it->min ? (v - it->min) * bw / (it->max - it->min) : 0;
+        if (!strncmp(it->name, "screen_", 7)) {
+            /* cores da tela: a barra vai de 0 a 20; "sistema" (-1) fica no valor do OnionOS */
+            fill = (v < 0 ? miyoo_screen_sys(it->name) : v) * bw / it->max;
+        }
         const int offv = (!strcmp(it->name, "autosave") || !strcmp(it->name, "dpad_smooth_turn") ||
                           !strcmp(it->name, "exact_filter_close")) ? 0
                          : !strcmp(it->name, "sprint_speed") ? 100 : -99999;

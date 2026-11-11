@@ -32,7 +32,7 @@ static pthread_mutex_t g_mx = PTHREAD_MUTEX_INITIALIZER;
 
 /* os valores do OnionOS (0..20), do system.json; os que faltarem: os padroes dele (10) */
 static void sys_values(int* cont, int* hue, int* sat) {
-    static char js[8192];
+    char js[8192]; /* (local: o menu e a thread da tela leem ao mesmo tempo) */
     FILE* f = fopen("/appconfigs/system.json", "r");
     size_t n = 0;
     const char* keys[3] = { "\"contrast\"", "\"hue\"", "\"saturation\"" };

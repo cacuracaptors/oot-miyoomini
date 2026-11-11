@@ -3,8 +3,9 @@
  * publicado do port e compara com a versao instalada (version.txt na pasta do jogo, gravado pelo tools/oot-package.sh).
  *
  * Etapa 1 (lote 223): so procura e mostra o "What's new" do release novo (o texto da pagina do release). O download e a
- * instalacao vem nas proximas etapas. Lote 224: ao abrir o menu, procura sozinha uma vez por dia e, se houver versao
- * nova, so avisa (a janela "What's new" fica para quando o jogador escolhe a opcao).
+ * instalacao vem nas proximas etapas. Lote 224: ao abrir o menu, procura sozinha (lote 237: uma vez cada vez que o
+ * aparelho e ligado; antes era uma vez por dia, o que dependia do relogio) e, se houver versao nova, so avisa (a
+ * janela "What's new" fica para quando o jogador escolhe a opcao).
  *
  * Etapas 2 e 3 (lote 225): baixar e instalar. O zip do release (o mesmo da pagina do GitHub) e baixado para .update/
  * na pasta do jogo (no cartao SD, nao na memoria), conferido (tamanho e sha256 que o GitHub da) e aberto em .update/x
@@ -48,9 +49,12 @@ extern char** environ;
 #define UPD_JSON "/tmp/oot_update.json"
 #define UPD_CODE "/tmp/oot_update.code"
 #define UPD_ERR "/tmp/oot_update.err"
-#define UPD_STAMP "update_check.txt" /* (na pasta do jogo) quando foi a ultima procura que o GitHub respondeu */
-#define UPD_EVERY (24 * 60 * 60)     /* a procura sozinha (ao abrir o menu): no maximo uma vez por dia */
-#define UPD_RETRY (60 * 60)          /* ...e, se o GitHub nao respondeu, de novo so depois de uma hora */
+/* a procura sozinha (ao abrir o menu) e uma vez cada vez que o aparelho e ligado: a marca fica no /tmp, que e na
+ * memoria e some ao desligar (fechar e abrir o jogo, o Game Switcher e o reinicio da instalacao nao apagam). Nao
+ * depende do relogio: ha aparelhos sem relogio proprio (ou com a hora errada), em que "uma vez por dia" falhava. */
+#define UPD_BOOT "/tmp/oot_update_checked"
+#define UPD_STAMP_OLD "update_check.txt" /* (a marca de um dia das versoes 1.0.6 e 1.0.7, na pasta do jogo: apagada) */
+#define UPD_RETRY (60 * 60)              /* se o GitHub nao respondeu: de novo so depois de uma hora (no mesmo jogo) */
 #define UPD_DIR ".update"
 #define UPD_ZIP UPD_DIR "/upd.zip"
 #define UPD_X UPD_DIR "/x"
@@ -564,11 +568,12 @@ static void* check_thread(void* arg) {
         g_busy = 0;
         return NULL;
     }
-    f = fopen(UPD_STAMP, "w");
+    f = fopen(UPD_BOOT, "w"); /* o GitHub respondeu: a automatica nao procura mais ate desligar o aparelho */
     if (f != NULL) {
-        fprintf(f, "%ld\n", (long)time(NULL));
+        fputs("1\n", f);
         fclose(f);
     }
+    remove(UPD_STAMP_OLD);
     find_asset(js, tag);
     notes[0] = 0;
     json_str(js, "body", notes, sizeof notes);
@@ -604,8 +609,9 @@ static void* check_thread(void* arg) {
     return NULL;
 }
 
-/* chamado pelo menu: automatic = 0, A em "Procurar atualizacoes"; 1, o menu acabou de abrir (procura no maximo uma vez
- * por dia, e so se o Wi-Fi estiver ligado; se achar versao nova, so avisa e pede para usar a opcao do menu).
+/* chamado pelo menu: automatic = 0, A em "Procurar atualizacoes"; 1, o menu acabou de abrir (procura uma vez cada vez
+ * que o aparelho e ligado, e so se o Wi-Fi estiver ligado; se achar versao nova, so avisa e pede para usar a opcao
+ * do menu).
  * 0 = nao comecou (ja estava procurando, ou a automatica nao era hora) */
 int port_update_check_start(int automatic) {
     static time_t lastTry;
@@ -621,17 +627,8 @@ int port_update_check_start(int automatic) {
         return 0;
     }
     if (automatic) {
-        FILE* f = fopen(UPD_STAMP, "r");
-        long last = 0;
-        if (f != NULL) {
-            if (fscanf(f, "%ld", &last) != 1) {
-                last = 0;
-            }
-            fclose(f);
-        }
-        /* (relogio que voltou para tras: procura de novo) */
-        if (last > 0 && now >= (time_t)last && now - (time_t)last < UPD_EVERY) {
-            return 0;
+        if (access(UPD_BOOT, F_OK) == 0) {
+            return 0; /* ja procurou desde que o aparelho foi ligado */
         }
         if (lastTry != 0 && now >= lastTry && now - lastTry < UPD_RETRY) {
             return 0;
