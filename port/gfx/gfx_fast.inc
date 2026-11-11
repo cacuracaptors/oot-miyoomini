@@ -468,8 +468,9 @@ int gx_ceu_mistura = 1;
 int gx_cc_alias = 1; /* (lote 190: 1o ciclo que so copia uma entrada lido direto pelo 2o; replay --sem-alias) */
 int gx_mistura_desliza = 2; /* (padrao 2 desde o lote 188: medido no lago Hylia, 384 -> 416 com o mesmo tempo) */
 /* Lote 247: texturas em meia resolucao (ideia do Miyoo64), opcoes do menu (Graficos): agua e texturas misturadas */
-int gx_agua_meia = 0;
-int gx_mistura_meia = 0;
+/* (ligadas por padrao desde o lote 248: medido no aparelho, ~3-5% a mais de largura no lago Hylia e no Dominio Zora) */
+int gx_agua_meia = 1;
+int gx_mistura_meia = 1;
 typedef struct {
     int sizeS, sizeT;   /* textura misturada */
     int raS, raT;       /* passo da 1a textura por texel da grade, em 1/64 de texel (64 = mesma grade) */
