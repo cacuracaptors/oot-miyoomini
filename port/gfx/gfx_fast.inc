@@ -472,7 +472,10 @@ int gx_mistura_desliza = 2; /* (padrao 2 desde o lote 188: medido no lago Hylia,
  * sem deslocamento): a textura misturada trava tambem. Dentro da faixa da textura o resultado e o mesmo de antes;
  * fora dela (malha que passa do fim da textura travada) a camada que deslizava fica parada junto com a travada.
  * Opcao gx_mistura_trava (options.txt premix_clamped). */
-int gx_mistura_trava = 1;
+/* Lote 244: desligada por padrao. Na medicao com quadros capturados ela era 10% mais rapida no Dominio Zora, mas
+ * la o mesmo quadro e repetido e a textura misturada fica guardada; no jogo de verdade a agua das paredes desliza a
+ * cada quadro, a mistura e refeita sempre (cerca de 1 ms por desenho) e o ganho sumiu (resolucao igual ou menor). */
+int gx_mistura_trava = 0;
 typedef struct {
     int sizeS, sizeT;   /* textura misturada */
     int raS, raT;       /* passo da 1a textura por texel da grade, em 1/64 de texel (64 = mesma grade) */
