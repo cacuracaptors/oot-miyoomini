@@ -217,6 +217,7 @@ int port_opt_nucleos_fixos = 1;  /* desenho no nucleo 0, auxiliar do desenho no 
 int port_opt_clock = 1600;          /* MHz da CPU ao abrir o jogo (0 = o que o sistema deixar, 1200) */
 int port_opt_clock_guard = 1; /* 1 = se o clock da CPU cair sozinho durante o jogo, pede de novo (a cada 10 s) */
 extern int gx_mistura_desliza;           /* gfx_fast.inc: texturas que deslizam pre-misturadas (lote 183) */
+extern int gx_mistura_filtro;            /* gfx_fast.inc: filtro das texturas misturadas (lote 245) */
 extern int gx_mistura_trava;             /* gfx_fast.inc: ...tambem com uma das texturas travada em T (lote 242) */
 extern int gx_ceu_mistura, gx_corte; /* gfx_fast.inc: ceu pre-misturado e recorte (teste da lentidao) */
 extern int port_fi_enabled;      /* port/frame_interp.c: quadros intermediarios (30 por segundo) */
@@ -652,6 +653,8 @@ static const struct {
       "with sky_premix: 1 = two sliding textures blended by a constant (water of Lake Hylia and Zora's Domain) are also blended once per frame and the water reads one texture instead of two (lighter; one layer may look a tiny bit softer); 2 = also the larger ones (Lake Hylia floor; default); 0 = blended on every pixel" },
     { "Performance", "premix_clamped", "", &gx_mistura_trava,
       "with premix_scrolling: 1 = also when one of the two textures does not repeat vertically (walls and floor of Zora's Domain, parts of Lake Hylia): lighter on still frames, but in real play the walls scroll every frame and the remixing eats the gain; 0 = those are blended on every pixel (default)" },
+    { "Performance", "premix_filter", "", &gx_mistura_filtro,
+      "textures blended in advance (premix_scrolling / premix_clamped): 1 = fast filter (prepared again every time they change), 0 = exact filter (no preparation)" },
     { "Performance", "crop_transparent", "", &gx_corte,
       "1 = the empty (transparent) part of mostly-empty textures is not drawn; 0 = drawn like before" },
     { "Performance", "stream_draw", "desenho_junto", &gx_stream,
@@ -1009,6 +1012,7 @@ static const struct {
     { "deferred_real_frame", 1 },
     { "premix_scrolling", 2 },
     { "premix_clamped", 0 },
+    { "premix_filter", 1 },
     { "sort_opaque", 1 },
     { "sort_batch", 120 },
     { "fused_draw", 1 },

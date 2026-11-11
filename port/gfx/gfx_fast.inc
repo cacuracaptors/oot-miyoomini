@@ -476,6 +476,10 @@ int gx_mistura_desliza = 2; /* (padrao 2 desde o lote 188: medido no lago Hylia,
  * la o mesmo quadro e repetido e a textura misturada fica guardada; no jogo de verdade a agua das paredes desliza a
  * cada quadro, a mistura e refeita sempre (cerca de 1 ms por desenho) e o ganho sumiu (resolucao igual ou menor). */
 int gx_mistura_trava = 0;
+/* Lote 245: medido no aparelho (Dominio Zora, com premix_clamped): as texturas misturadas mudam a cada quadro e o
+ * filtro rapido delas (tex_prefilter) e refeito toda vez, na thread principal: 5% dela, e a auxiliar ficava esperando.
+ * 0 = as texturas misturadas usam o filtro exato (sem preparo); 1 = o filtro rapido, como antes. */
+int gx_mistura_filtro = 1;
 typedef struct {
     int sizeS, sizeT;   /* textura misturada */
     int raS, raT;       /* passo da 1a textura por texel da grade, em 1/64 de texel (64 = mesma grade) */
@@ -2395,7 +2399,9 @@ static void fused_check(FastProg *f) {
                 ok = 0;
             } else {
                 f->sampn[k] = g_sampn[f->bilerp && !f->t[k].hdPoint ? 1 : 0][f->t[k].modeS == 2][f->t[k].modeT == 2];
-                if (gx_tex_prefilter && f->bilerp && !f->t[k].hdPoint && tex_prefilter(&f->t[k])) {
+                if (gx_tex_prefilter && f->bilerp && !f->t[k].hdPoint &&
+                    (gx_mistura_filtro || g_premixTx == NULL || f->t[k].tx != g_premixTx) &&
+                    tex_prefilter(&f->t[k])) {
                     f->sampn[k] = g_sampf[f->t[k].pfs >= 1 && f->t[k].pfs <= 3 ? f->t[k].pfs : 1][f->t[k].modeS == 2][f->t[k].modeT == 2];
                     if (gx_filtro_exato_perto > 0) {
                         /* de perto: o filtro exato da mesma textura (hd_close decide por triangulo) */
