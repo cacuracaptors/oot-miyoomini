@@ -2542,7 +2542,27 @@ typedef struct {
     uint8x8_t dth;       /* pontilhado da cor: o que soma em cada um dos 8 pixels do grupo (0 = nenhum) */
     uint8_t *covW;       /* linha da mascara de cobertura a marcar (fundo adiado) */
     const uint8_t *covR; /* linha da mascara: desenha so onde ainda nao ha nada */
+    /* sombreamento: o quanto cada um dos 8 pixels do grupo soma (d * 0..3) e d * 4, por canal; calculado uma vez por
+     * trecho (lote 239; antes, uma multiplicacao por canal em cada grupo) */
+    uint32x4_t shl[4], shd4[4];
 } SpanCtx;
+
+/* pontilhado da cor ja na ordem dos 8 pixels de um grupo que comeca em x (x & 3): [tabela][y & 3][x & 3] (lote 239;
+ * antes era montado byte a byte em cada trecho) */
+static uint8_t g_dith8[3][4][4][8];
+static void __attribute__((constructor)) dith8_init(void) {
+    extern const uint8_t gx_dith[3][4][4];
+    int t, y, x, k;
+    for (t = 0; t < 3; t++) {
+        for (y = 0; y < 4; y++) {
+            for (x = 0; x < 4; x++) {
+                for (k = 0; k < 8; k++) {
+                    g_dith8[t][y][x][k] = gx_dith[t][y][(x + k) & 3];
+                }
+            }
+        }
+    }
+}
 
 /* etapa 1: mascara e z novo de cada grupo; devolve quantos grupos vivos (indices em live) */
 static inline __attribute__((always_inline)) int zph_tpl(const SpanCtx *sc, int xc, int ng, uint8x8_t *mk, uint16x8_t *zn,
@@ -2754,12 +2774,11 @@ static inline __attribute__((always_inline)) void grp_tpl(const SpanCtx *sc, int
     /* --- sombreamento (canal a canal, sem indice variavel: os 4 ficam em registradores) --- */
     if (f->fnsh) {
         /* valor = (base + d*j + 0x8000) >> 16, saturado em 0..255 (vqshrun = deslocamento com saturacao) */
-        const uint32x4_t lanes = vld1q_u32((const uint32_t *)k_ident);
 #define SHADE_CH(ch)                                                                                      \
         if (f->needShade[ch]) {                                                                           \
             const uint32_t d = (uint32_t)p->dx[ch];                                                       \
-            uint32x4_t v0 = vmlaq_n_u32(vdupq_n_u32(sc->base[ch] + d * j0 + 0x8000u), lanes, d);          \
-            uint32x4_t v1 = vaddq_u32(v0, vdupq_n_u32(d * 4u));                                           \
+            uint32x4_t v0 = vaddq_u32(vdupq_n_u32(sc->base[ch] + d * j0 + 0x8000u), sc->shl[ch]);         \
+            uint32x4_t v1 = vaddq_u32(v0, sc->shd4[ch]);                                                  \
             sh[ch] = vqmovn_u16(vcombine_u16(vqshrun_n_s32(vreinterpretq_s32_u32(v0), 16),                \
                                              vqshrun_n_s32(vreinterpretq_s32_u32(v1), 16)));              \
             R[V_SHADE + ch] = sh[ch];                                                                     \
@@ -3137,14 +3156,16 @@ static inline __attribute__((always_inline)) void span_fused_tpl(const GxPrim *p
         ctx->rProg = f;
         ctx->rGen = f->gen;
     }
-    sc.dth = vdup_n_u8(0);
-    if (f->cdith) {
-        extern const uint8_t gx_dith[3][4][4];
-        uint8_t t[8];
-        for (k = 0; k < 8; k++) {
-            t[k] = gx_dith[f->cdith][y & 3][(xs + k) & 3];
+    sc.dth = f->cdith ? vld1_u8(g_dith8[f->cdith][y & 3][xs & 3]) : vdup_n_u8(0);
+    if (f->fnsh) {
+        const uint32x4_t lanes = vld1q_u32((const uint32_t *)k_ident);
+        #pragma GCC unroll 4
+        for (k = 0; k < 4; k++) {
+            if (f->needShade[k]) {
+                sc.shl[k] = vmulq_n_u32(lanes, (uint32_t)p->dx[k]);
+                sc.shd4[k] = vdupq_n_u32((uint32_t)p->dx[k] * 4u);
+            }
         }
-        sc.dth = vld1_u8(t);
     }
     sc.thr = vdup_n_u8(0);
     if (f->ac == 3) {
