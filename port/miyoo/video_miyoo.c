@@ -1620,11 +1620,100 @@ static void menu_to_page(const uint32_t* src, uint32_t* dst, int back) {
     }
 }
 
-static void toast_draw(uint32_t* page) {
+#ifdef HAVE_MI_GFX
+/* O aviso pelo chip 2D (11/2026): montado uma vez (quando o texto muda) numa imagem propria e desenhado pelo chip,
+ * depois do HUD e do filtro, na mesma fila. Antes o processador o escrevia direto na pagina, logo depois do chip:
+ * as partes do aviso sobre o HUD piscavam (o HUD aparecia por cima por um instante), mesmo com a pagina guardada
+ * certa (fotos da tela no quicksave/quickload). As linhas de baixo da pagina (o alto da tela, que e girada 180). */
+#define TOAST_ROWS 64
+static MI_PHY g_tstPhys;
+static uint32_t* g_tstVirt;
+static int g_tstFail, g_tstW, g_tstTheme = -1;
+static char g_tstText[64];
+
+static int toast_ge(int back) {
+    extern int port_opt_menu_theme;
+    const int W = PANEL_W, H = PANEL_H;
+    const MI_U32 bytes = (MI_U32)W * TOAST_ROWS * 4;
+    MI_U16 fence = 0;
+    if (g_tstFail || !hw_ok) {
+        return 0;
+    }
+    if (g_tstVirt != NULL && g_tstW != W) {
+        return 0; /* (a tela mudou de tamanho: fica com o processador) */
+    }
+    if (g_tstVirt == NULL) {
+        void* v = NULL;
+        if (mi.MmaAlloc(NULL, bytes, &g_tstPhys) != 0) {
+            g_tstFail = 1;
+            return 0;
+        }
+        if (mi.Mmap(g_tstPhys, bytes, &v, TRUE) != 0) {
+            mi.MmaFree(g_tstPhys);
+            g_tstPhys = 0;
+            g_tstFail = 1;
+            return 0;
+        }
+        g_tstVirt = (uint32_t*)v;
+        g_tstW = W;
+        g_tstText[0] = 0;
+    }
+    if (strcmp(g_tstText, g_toast) != 0 || g_tstTheme != port_opt_menu_theme) {
+        /* desenhado duas vezes, sobre preto e sobre branco: a diferenca da a transparencia (os cantos e as letras
+         * suavizados) e o desenho sobre preto ja e a cor multiplicada pelo alfa, como o chip mistura */
+        uint32_t* a = (uint32_t*)malloc((size_t)W * H * 4);
+        uint32_t* b = (uint32_t*)malloc((size_t)W * H * 4);
+        int i;
+        if (a == NULL || b == NULL) {
+            free(a);
+            free(b);
+            return 0;
+        }
+        memset(a, 0, (size_t)W * H * 4);
+        for (i = 0; i < W * H; i++) {
+            b[i] = 0x00FFFFFFu;
+        }
+        miyoo_menu_draw_toast(a, g_toast);
+        miyoo_menu_draw_toast(b, g_toast);
+        for (i = 0; i < W * TOAST_ROWS; i++) {
+            const size_t k = (size_t)(H - TOAST_ROWS) * W + (size_t)i;
+            const uint32_t pa = a[k], pb = b[k];
+            const int d = ((int)((pb >> 16) & 255) - (int)((pa >> 16) & 255) + (int)((pb >> 8) & 255) -
+                           (int)((pa >> 8) & 255) + (int)(pb & 255) - (int)(pa & 255) + 1) / 3;
+            const int al = 255 - (d < 0 ? 0 : d > 255 ? 255 : d);
+            g_tstVirt[i] = al == 0 ? 0u : ((uint32_t)al << 24) | (pa & 0xFFFFFFu);
+        }
+        free(a);
+        free(b);
+        mi.Flush(g_tstVirt, bytes);
+        snprintf(g_tstText, sizeof g_tstText, "%s", g_toast);
+        g_tstTheme = port_opt_menu_theme;
+    }
+    {
+        const MI_PHY page = (MI_PHY)fb_phys + (MI_PHY)back * W * H * 4;
+        MI_GFX_Rect_t sr = { 0, 0, (MI_U32)W, TOAST_ROWS };
+        MI_GFX_Rect_t dr = { 0, H - TOAST_ROWS, (MI_U32)W, TOAST_ROWS };
+        if (ge_blit(g_tstPhys, W, TOAST_ROWS, &sr, page, W, H, &dr, E_MI_GFX_ROTATE_0, &fence) != 0) {
+            return 0;
+        }
+        mi.Wait(TRUE, fence);
+    }
+    return 1;
+}
+#endif
+
+static void toast_draw(uint32_t* page, int back) {
     battery_draw(page);
     if (g_toastUntil == 0 || miyoo_now_ms() >= g_toastUntil) {
         return;
     }
+#ifdef HAVE_MI_GFX
+    if (toast_ge(back)) {
+        return;
+    }
+#else
+    (void)back;
+#endif
     miyoo_menu_draw_toast(page, g_toast); /* (menu_miyoo.c: caixa verde com contorno dourado, como o menu) */
 }
 
@@ -1973,7 +2062,7 @@ static void* flip_proc(void* arg) {
                 clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
                 t_ccpu += (double)ts.tv_sec * 1e3 + (double)ts.tv_nsec / 1e6 - c0;
             }
-            toast_draw(fb_page_ptr(back)); /* icone de bateria fraca e aviso do estado rapido, por cima de tudo */
+            toast_draw(fb_page_ptr(back), back); /* icone de bateria fraca e aviso do estado rapido, por cima de tudo */
             pt_ev(PT_FLIP_PRESENT + 1, 0);
             if (fb_pages == 2) {
                 fb_var.yoffset = (unsigned)(back * PANEL_H);
@@ -2281,6 +2370,14 @@ static void release_mma(void) {
         }
     }
     ge_ok = 0;
+    if (g_tstVirt != NULL) {
+        mi.Munmap(g_tstVirt, (MI_U32)g_tstW * TOAST_ROWS * 4);
+        mi.MmaFree(g_tstPhys);
+        g_tstVirt = NULL;
+        g_tstPhys = 0;
+        kb += ((unsigned)g_tstW * TOAST_ROWS * 4) >> 10;
+        n++;
+    }
     if (rt_virt != NULL) {
         mi.Munmap(rt_virt, (MI_U32)(PANEL_W * PANEL_H * 4));
         mi.MmaFree(rt_phys);
