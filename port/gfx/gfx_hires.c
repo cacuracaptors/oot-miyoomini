@@ -1319,6 +1319,12 @@ static void prv_end(void) {
     if (k >= 0 && g_prvBuf[k] != NULL && g_prvRam[k] != NULL) {
         gx_batch_flush();
         ram = (uint8_t *)(uintptr_t)g_prvRam[k];
+        /* a imagem de 64 do Link fica na RAM de uma tela do N64 (o comeco dela). Se essa tela tem uma imagem maior
+         * ainda nao reduzida (tela de 752x560 com o filtro retro: o menu fica em 376x280, nao em 320), a reducao vinha
+         * depois, quando o jogo lia a imagem do Link para a textura do menu (gx_hr_reading), e escrevia a tela antiga
+         * por cima do Link: o Link da tela de equipamentos saia em listras (Mini v4 e Mini Flip, 11/2026). A tela
+         * antiga e anterior ao Link: reduz agora, e o Link vai por cima, como no N64. */
+        gx_hr_reading(ram);
         for (y = 0; y < PRV_H; y++) {
             const uint8_t *a = g_prvBuf[k] + (size_t)(2 * y) * PRV_W * 4u, *b = a + PRV_W * 4u;
             uint8_t *d = ram + (size_t)y * PRV_W * 2u;
