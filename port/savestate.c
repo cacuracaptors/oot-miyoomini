@@ -54,6 +54,7 @@ extern uint32_t osMemSize;
 extern int port_opt_idioma;
 
 /* port/miyoo (fracos: o teste no PC nao tem) */
+extern int port_warp_entrance; /* port_main.c: >= 0 no modo de teste (--warp / opcao test_warp) */
 void miyoo_video_toast(const char* text) __attribute__((weak));
 int miyoo_video_front(const uint32_t** page) __attribute__((weak)); /* pagina na tela, 640x480 girada 180 */
 void miyoo_quit(int code) __attribute__((weak));
@@ -1034,6 +1035,18 @@ int port_ss_want(int isPlay, int isSetup) {
     if (off) {
         request_exit(EXIT_POWEROFF);
     }
+    if (port_warp_entrance >= 0) {
+        /* teste (--warp / opcao test_warp): sem estados, para um estado do save de teste nunca ficar no lugar de um
+         * do jogo de verdade; fechar e sempre "sem estado" */
+        if (g_exitKind >= 0) {
+            exit_without_state(g_exitKind);
+        }
+        if (port_ss_req) {
+            port_ss_req = 0;
+            toast("No save states in test mode", "Sem estados no modo de teste");
+        }
+        return OP_NONE;
+    }
     if (g_exitKind >= 0) {
         if (!isPlay) {
             exit_without_state(g_exitKind);
@@ -1202,6 +1215,10 @@ int port_ss_load(int which, uint16_t* seqMain, uint16_t* seqSub) {
 
 /* menu_miyoo.c: pedir para salvar (OP_SAVE_SLOT = 5) ou carregar (6) o estado slot (0..9) */
 void port_ss_slot_request(int save, int slot) {
+    if (port_warp_entrance >= 0) {
+        toast("No save states in test mode", "Sem estados no modo de teste");
+        return;
+    }
     if (slot >= 0 && slot < NSLOTS) {
         g_slot = slot;
         g_slotOp = save ? OP_SAVE_SLOT : OP_LOAD_SLOT;

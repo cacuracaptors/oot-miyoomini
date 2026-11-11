@@ -198,6 +198,8 @@ extern int os_rt;               /* platform/os_core.c: threads do jogo, som e te
 extern int os_rt_draw;          /* platform/os_core.c: desenho em tempo real */
 extern int gx_slowcap_ms, gx_slowcap_after;       /* port/gfx/gfx_hook.c: grava quadros lentos */
 extern int gx_trace;
+int port_opt_test_warp = -1;      /* teste: abrir o jogo direto num lugar (numero da entrada), com o save de teste */
+int port_opt_test_warp_adult = 0; /* ...com Link adulto */
 extern int gx_hidden_stats; /* port/gfx/gfx_fast.inc: medicao dos triangulos escondidos no log */
 extern int port_opt_reload_overlays; /* port/ovl_reset.c */
 extern int gx_tex_meia; /* port/gfx/gfx_fast.inc: texturas ampliadas amostradas nos pixels pares */
@@ -666,6 +668,9 @@ static const struct {
       "1 = detailed measurement of the CPU cores (what each thread does, where, and the time per function); SELECT+R1 saves perf_NN.bin (the last ~30 s), also saved when quitting; tools/oot-perf-report.py turns it into a page. Costs a little CPU: leave 0 when just playing" },
     { "Diagnostics", "frame_trace", "registro_quadros", &gx_trace,
       "1 = every draw and every image shown becomes a [q] line in log.txt (per-frame timings), 0 = off" },
+    { "Diagnostics", "test_warp", "", &port_opt_test_warp,
+      "testing: N = the game opens straight at entrance N (decimal), skipping the title screen, with a test save that has every item, kept in saves/oot_test.sav (your own saves are not touched; save states are off in this mode). -1 = off (normal game). Some entrances: 205 Hyrule Field, 219 Kakariko, 234 Zora's River, 258 Lake Hylia, 264 Zora's Domain, 270 Zora's Fountain, 16 Water Temple (the full list, in hexadecimal, is in tools/oot-tour-list.txt)" },
+    { "Diagnostics", "test_warp_adult", "", &port_opt_test_warp_adult, "with test_warp: 1 = adult Link, 0 = child Link" },
     { "Diagnostics", "hidden_stats", "", &gx_hidden_stats,
       "1 = every 3 s an [oculto] line in log.txt: how many triangles end up fully hidden behind what was already drawn and how much drawing time they take (measuring costs a little CPU), 0 = off" },
     { "Diagnostics", "slow_capture_ms", "captura_lenta", &gx_slowcap_ms,
@@ -1014,6 +1019,8 @@ static const struct {
     { "perf_trace", 0 },
     { "frame_trace", 0 },
     { "hidden_stats", 0 },
+    { "test_warp", -1 },
+    { "test_warp_adult", 0 },
     { "slow_capture_ms", 0 },
     { "slow_capture_after", 0 },
 };

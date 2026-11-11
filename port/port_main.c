@@ -622,7 +622,7 @@ int main(int argc, char** argv) {
     const char* capList = NULL;
     const char* wav = NULL;
     int mute = 0, cpuGame = -1, cpuGfx = -1, cpuAudio = -1;
-    int i;
+    int i, sramSet = 0;
 
     gx.traceSeg = -1;
     gx_fast = 1; /* caminho rapido dos spans (identico a referencia bit a bit); --gfx-ref desliga */
@@ -680,6 +680,7 @@ int main(int argc, char** argv) {
             swapmap = argv[++i];
         } else if (!strcmp(argv[i], "--sram") && i + 1 < argc) {
             sram = argv[++i];
+            sramSet = 1;
         } else if (!strcmp(argv[i], "--seconds") && i + 1 < argc) {
             g_seconds = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "--log")) {
@@ -747,6 +748,22 @@ int main(int argc, char** argv) {
 #endif
 
     port_options_load("options.txt"); /* (antes do cartucho: as mensagens das telas saem na lingua escolhida) */
+    {
+        /* teste (opcoes test_warp e test_warp_adult, Diagnostics): o mesmo que --warp N [--adulto], sem mexer no
+         * roteiro que abre o jogo. O save de teste fica num arquivo proprio (os saves do jogador nao sao tocados) e
+         * os estados salvos ficam desligados (savestate.c). */
+        extern int port_opt_test_warp, port_opt_test_warp_adult; /* port_options.c */
+        if (port_warp_entrance < 0 && port_opt_test_warp >= 0) {
+            port_warp_entrance = port_opt_test_warp;
+            port_warp_age = port_opt_test_warp_adult ? 0 : 1;
+        }
+        if (port_warp_entrance >= 0 && !sramSet) {
+            sram = "saves/oot_test.sav";
+            mkdir("saves", 0755);
+            fprintf(stderr, "[teste] abrindo direto na entrada %d (0x%X), Link %s; save de teste em %s, sem estados\n",
+                    port_warp_entrance, port_warp_entrance, port_warp_age ? "crianca" : "adulto", sram);
+        }
+    }
 #ifdef TARGET_MIYOO
     {
         void miyoo_screen_init(void); /* contraste, matiz e saturacao da tela (miyoo/screen_miyoo.c) */
