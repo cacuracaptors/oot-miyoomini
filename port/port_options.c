@@ -216,7 +216,7 @@ extern int gx_hr_max_opt, gx_hr_alvo, gx_hr_texto, gx_retro, gx_retro_forca, gx_
 int port_opt_nucleos_fixos = 1;  /* desenho no nucleo 0, auxiliar do desenho no 1 */
 int port_opt_clock = 1600;          /* MHz da CPU ao abrir o jogo (0 = o que o sistema deixar, 1200) */
 int port_opt_clock_guard = 1; /* 1 = se o clock da CPU cair sozinho durante o jogo, pede de novo (a cada 10 s) */
-extern int gx_agua_meia, gx_mistura_meia, gx_amp_meia, gx_transp_meia, gx_ceu_meia; /* gfx_fast.inc: texturas em meia resolucao (lote 247) */
+extern int gx_agua_meia, gx_mistura_meia, gx_amp_meia, gx_transp_meia, gx_ceu_meia, gx_recorte_meia; /* gfx_fast.inc: texturas em meia resolucao (lote 247) */
 extern int gx_mistura_desliza;           /* gfx_fast.inc: texturas que deslizam pre-misturadas (lote 183) */
 extern int gx_ceu_mistura, gx_corte; /* gfx_fast.inc: ceu pre-misturado e recorte (teste da lentidao) */
 extern int port_fi_enabled;      /* port/frame_interp.c: quadros intermediarios (30 por segundo) */
@@ -606,6 +606,8 @@ static const struct {
       "1 = the flash when the sword hits an enemy or a liftable rock is drawn only where the image has something, and its last almost-empty frames are skipped (lighter in combat; looks the same); 0 = like the original" },
     { "Performance", "half_res_magnified", "", &gx_amp_meia,
       "1 = where a texture appears stretched 2x or more on screen, it is read on every other pixel and each point is used for the pixel next to it too (almost the same image, lighter; default); 0 = every pixel, like the original" },
+    { "Performance", "half_res_cutout", "", &gx_recorte_meia,
+      "with half_res_magnified / half_res_transparent: 1 = also textures cut out by their alpha, like tree leaves (the cut edge may move by 1 pixel; default); 0 = not those" },
     { "Performance", "half_res_sky", "", &gx_ceu_meia,
       "with half_res_magnified: 1 = also the sky and backgrounds (default); 0 = only surfaces with depth" },
     { "Performance", "half_res_transparent", "", &gx_transp_meia,
@@ -1000,6 +1002,7 @@ static const struct {
     { "half_res_magnified", 1 },
     { "half_res_transparent", 1 },
     { "half_res_sky", 1 },
+    { "half_res_cutout", 1 },
     { "light_hit_marks", 1 },
     { "fast_magnified_textures", 0 },
     { "hd_title_logo", 1 },

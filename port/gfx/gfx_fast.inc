@@ -473,7 +473,8 @@ int gx_mistura_desliza = 2; /* (padrao 2 desde o lote 188: medido no lago Hylia,
 int gx_agua_meia = 1;
 int gx_mistura_meia = 1;
 int gx_amp_meia = 1;    /* lote 249: texturas ampliadas (half_res_magnified); ligada desde o lote 250 (Kakariko: +2% de largura) */
-int gx_ceu_meia = 1;    /* lote 252: ceu e fundos ampliados (half_res_sky) */
+int gx_ceu_meia = 1;
+int gx_recorte_meia = 1; /* lote 253: texturas recortadas pelo alfa (folhas das arvores), com as opcoes acima */    /* lote 252: ceu e fundos ampliados (half_res_sky) */
 int gx_transp_meia = 1; /* lote 249: transparencias com profundidade (half_res_transparent); ligada desde o lote 251 */
 typedef struct {
     int sizeS, sizeT;   /* textura misturada */
@@ -2505,10 +2506,14 @@ static void fused_check(FastProg *f) {
          * HUD e efeitos sem profundidade ficam de fora).
          *  agua (half_res_water): transparente (mistura com a tela), uma textura que repete: lago Hylia;
          *  mistura (half_res_blend): duas texturas misturadas: paredes e chao do Dominio Zora, cachoeiras. */
-        const int base = ok && f->bilerp && !f->ac && !f->cvgXAlpha && f->zcmp && f->useT[0] && f->sampn[0] != NULL &&
+        /* (lote 253: com a opcao half_res_cutout, tambem as texturas recortadas pelo alfa, como as folhas das
+         * arvores: a borda do recorte anda no maximo 1 pixel; a agua e a mistura continuam sem recorte) */
+        const int recOk = (!f->ac && !f->cvgXAlpha) || gx_recorte_meia;
+        const int base = ok && f->bilerp && recOk && f->zcmp && f->useT[0] && f->sampn[0] != NULL &&
                          !f->t[0].hdPoint;
-        const int agua = gx_agua_meia && f->needMem && !f->useT[1] && f->t[0].modeS == 0 && f->t[0].modeT == 0;
-        const int mist = gx_mistura_meia && f->useT[1] && f->sampn[1] != NULL && !f->t[1].hdPoint;
+        const int semRec = !f->ac && !f->cvgXAlpha;
+        const int agua = semRec && gx_agua_meia && f->needMem && !f->useT[1] && f->t[0].modeS == 0 && f->t[0].modeT == 0;
+        const int mist = semRec && gx_mistura_meia && f->useT[1] && f->sampn[1] != NULL && !f->t[1].hdPoint;
         /* lote 249: transparencias com profundidade (fumaca, poeira, efeitos; opcao half_res_transparent: na abertura,
          * menos quadros lentos quando a poeira da Epona cobre a tela) e, em qualquer superficie, os trechos em que cada ponto da textura cobre 2 pixels ou mais na horizontal: ali ler
          * um ponto a cada 2 pixels da quase a mesma imagem (opcao half_res_magnified; ver span_magnified) */
