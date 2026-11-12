@@ -473,6 +473,7 @@ int gx_mistura_desliza = 2; /* (padrao 2 desde o lote 188: medido no lago Hylia,
 int gx_agua_meia = 1;
 int gx_mistura_meia = 1;
 int gx_amp_meia = 1;    /* lote 249: texturas ampliadas (half_res_magnified); ligada desde o lote 250 (Kakariko: +2% de largura) */
+int gx_ceu_meia = 1;    /* lote 252: ceu e fundos ampliados (half_res_sky) */
 int gx_transp_meia = 1; /* lote 249: transparencias com profundidade (half_res_transparent); ligada desde o lote 251 */
 typedef struct {
     int sizeS, sizeT;   /* textura misturada */
@@ -2515,6 +2516,12 @@ static void fused_check(FastProg *f) {
         const int transp = gx_transp_meia && f->needMem && dois;
         f->meia2 = base && (agua || mist || transp);
         f->meiaAmp = base && dois && gx_amp_meia && !f->meia2;
+        /* lote 252: o ceu e os fundos (opacos, sem teste de profundidade) tambem, quando ampliados (opcao
+         * half_res_sky): o ceu e uma textura pequena esticada sobre boa parte da tela, em quase todas as cenas */
+        if (!f->meia2 && !f->meiaAmp && gx_amp_meia && gx_ceu_meia && ok && f->bilerp && !f->ac && !f->cvgXAlpha &&
+            !f->zcmp && !f->needMem && f->useT[0] && f->sampn[0] != NULL && !f->t[0].hdPoint && dois) {
+            f->meiaAmp = 1;
+        }
     }
 }
 
