@@ -6,6 +6,7 @@
 #ifndef PORT_MIYOO_H
 #define PORT_MIYOO_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 double miyoo_now_ms(void);
@@ -53,6 +54,7 @@ void miyoo_menu_slots_changed(void);
 enum { MIYOO_UPD_LATEST, MIYOO_UPD_NEWER, MIYOO_UPD_NO_NET, MIYOO_UPD_ERROR };
 void miyoo_menu_update_result(int code, const char* latest, const char* cur, const char* notes, int automatic);
 int port_update_check_start(int automatic);
+void port_update_local_version(char* out, size_t n); /* versao instalada (version.txt); "" = desenvolvimento */
 enum { MIYOO_UPST_IDLE, MIYOO_UPST_DOWNLOADING, MIYOO_UPST_PREPARING, MIYOO_UPST_READY, MIYOO_UPST_FAILED };
 enum { MIYOO_UPERR_NONE, MIYOO_UPERR_NET, MIYOO_UPERR_SPACE, MIYOO_UPERR_DOWNLOAD, MIYOO_UPERR_VERIFY, MIYOO_UPERR_MEMORY,
        MIYOO_UPERR_EXTRACT, MIYOO_UPERR_NEEDROM, MIYOO_UPERR_INSTALL };

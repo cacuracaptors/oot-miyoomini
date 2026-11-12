@@ -86,6 +86,12 @@ static const Item k_items[] = {
     T(TAB_CONTROLS, "ledge_grab", "Grab ledges when walking off", "Agarrar a borda ao sair dela"),
     R(TAB_CONTROLS, "sprint_speed", "Sprint speed (%)", "Corrida (% da velocidade)", 100, 250, 10),
     T(TAB_CONTROLS, "quick_gear_swap", "SELECT+Left/Right: tunic/boots", "SELECT+esq./dir.: túnica/botas"),
+    R(TAB_CONTROLS, "camera_distance", "Camera distance (%)", "Distância da câmera (%)", 70, 130, 5),
+    T(TAB_CONTROLS, "better_roll", "Better roll", "Rolada melhor"),
+    T(TAB_CONTROLS, "arrow_cycle", "Arrow cycle (R1 while aiming)", "Trocar flecha (R1 mirando)"),
+    T(TAB_CONTROLS, "bow_reticle", "Bow and slingshot reticle", "Mira no arco e estilingue"),
+    T(TAB_CONTROLS, "hookshot_reticle_color", "Green Hookshot reticle", "Mira verde no gancho"),
+    T(TAB_CONTROLS, "no_dropped_ocarina_inputs", "No dropped ocarina notes", "Ocarina sem notas perdidas"),
     /* teclas personalizaveis (lote 197): no fim da aba, debaixo de um titulo (linha "#": so o titulo, nao se escolhe);
      * toque e segurado de cada botao (input_miyoo.c); o nome vem de key_label */
     { TAB_CONTROLS, "#keys", "Buttons: tap and hold", "Teclas: toque e segurar", -1, -1, 0, 0 },
@@ -120,7 +126,6 @@ static const Item k_items[] = {
     T(TAB_ENH, "enemy_health_bar", "Enemy health bar", "Barra de vida do inimigo"),
     T(TAB_ENH, "low_health_beep", "Low health beep", "Alarme de vida baixa"),
     T(TAB_ENH, "disable_crit_wiggle", "No camera wiggle at low health", "Sem tremor com vida baixa"),
-    R(TAB_ENH, "camera_distance", "Camera distance (%)", "Distância da câmera (%)", 70, 130, 5),
     T(TAB_ENH, "remember_save_location", "Remember save location", "Lembrar onde salvou"),
     T(TAB_ENH, "gs_token_count", "Gold Skulltula count", "Contagem de Skulltulas"),
     T(TAB_ENH, "heart_piece_count", "Piece of Heart count", "Contagem de pedaços de coração"),
@@ -143,13 +148,11 @@ static const Item k_items[] = {
     T(TAB_ENH, "dynamic_wallet_icon", "Dynamic wallet icon", "Ícone da carteira com a cor"),
     T(TAB_ENH, "visual_agony", "Visual Stone of Agony", "Pedra da Agonia visual"),
     T(TAB_ENH, "file_select_time_flow", "Time flows on file select", "Céu andando nos arquivos"),
-    T(TAB_ENH, "no_dropped_ocarina_inputs", "No dropped ocarina notes", "Ocarina sem notas perdidas"),
     T(TAB_ENH, "persistent_masks", "Persistent masks", "Máscaras persistentes"),
     T(TAB_ENH, "nuts_explode_bombs", "Deku Nuts explode bombs", "Nozes explodem bombas"),
     T(TAB_ENH, "no_first_person_bombchus", "No first-person bombchus", "Bombchu sem 1ª pessoa"),
     T(TAB_ENH, "skip_arrow_animation", "Skip magic arrow animation", "Pular animação das flechas"),
     T(TAB_ENH, "fast_boomerang", "Instant boomerang recall", "Bumerangue volta na hora"),
-    T(TAB_ENH, "better_roll", "Better roll", "Rolada melhor"),
     T(TAB_ENH, "faster_pause_menu", "Faster pause menu", "Menu de pausa rápido"),
     T(TAB_ENH, "faster_bottle_empty", "Faster bottle emptying", "Esvaziar garrafa rápido"),
     T(TAB_ENH, "faster_rupee_counter", "Faster rupee counter", "Contador de rupias rápido"),
@@ -168,9 +171,6 @@ static const Item k_items[] = {
     T(TAB_ENH, "skip_child_stealth", "Skip child stealth", "Pular os guardas do castelo"),
     T(TAB_ENH, "skip_tower_escape", "Skip tower escape", "Pular a fuga da torre"),
     T(TAB_ENH, "market_sneak", "Leave the Market at night", "Sair do mercado à noite"),
-    T(TAB_ENH, "arrow_cycle", "Arrow cycle (R1 while aiming)", "Trocar flecha (R1 mirando)"),
-    T(TAB_ENH, "bow_reticle", "Bow and slingshot reticle", "Mira no arco e estilingue"),
-    T(TAB_ENH, "hookshot_reticle_color", "Green Hookshot reticle", "Mira verde no gancho"),
     T(TAB_ENH, "time_travel", "Song of Time time travel", "Viajar no tempo com a ocarina"),
     T(TAB_ENH, "pause_warp", "Warp songs from the pause menu", "Teleporte pelo menu de pausa"),
     T(TAB_ENH, "mask_select", "Mask select", "Escolher a máscara"),
@@ -256,8 +256,6 @@ static const Item k_items[] = {
     T(TAB_GFX, "opaque_text_boxes", "Opaque text boxes", "Caixas de texto opacas"),
     T(TAB_GFX, "opaque_pause_menu", "Opaque pause menu", "Menu de pausa opaco"),
     T(TAB_GFX, "light_hit_marks", "Lighter hit flash", "Brilho de acerto leve"),
-    T(TAB_GFX, "half_res_water", "Half-resolution water", "Água em meia resolução"),
-    T(TAB_GFX, "half_res_blend", "Half-res blended textures", "Texturas misturadas em meia resolução"),
     T(TAB_GFX, "lens_flare", "Sun lens flare", "Reflexo do sol na lente"),
     R(TAB_GFX, "light_halo_tolerance", "Light halo tolerance", "Folga dos halos de luz", 0, 2000, 100),
 };
@@ -716,7 +714,7 @@ void miyoo_menu_open(void) {
         g_dirty = 1;
         g_open = 1;
         fprintf(stderr, "menu: aberto\n");
-        port_update_check_start(1); /* (uma vez por dia, so com Wi-Fi; nao segura o menu: roda numa thread) */
+        port_update_check_start(1); /* (uma vez a cada vez que o aparelho e ligado, so com Wi-Fi; nao segura o menu: roda numa thread) */
     }
 }
 
@@ -1695,6 +1693,18 @@ static int draw_value(const Item* it, int y, int isSel) {
         /* botao redondo "A" */
         circle((float)(VAL_X1 - 13), (float)cy, 12.0f, isSel ? TH(accent) : TH(track), 255);
         big(VAL_X1 - 13 - big_width("A") / 2, y, "A", isSel ? 0xFFFFFFu : TH(dim));
+        if (!strcmp(it->name, "@update")) {
+            /* versao instalada, ao lado do A (version.txt; "dev" = build de desenvolvimento) */
+            static char ver[32];
+            if (ver[0] == 0) {
+                char v[24];
+                port_update_local_version(v, sizeof v);
+                snprintf(ver, sizeof ver, "%s%s", v[0] && v[0] != 'v' && v[0] != 'V' ? "v" : "", v[0] ? v : "dev");
+            }
+            x0 = VAL_X1 - 26 - 10 - big_width(ver);
+            big(x0, y, ver, TH(dim));
+            return x0;
+        }
         return VAL_X1 - 26;
     }
     if (it->min == 0 && it->max == 1 && choice_name(it->name, 0) == NULL) {

@@ -91,6 +91,10 @@ static void local_version(char* out, size_t n) {
     out[strcspn(out, "\r\n \t")] = 0;
 }
 
+void port_update_local_version(char* out, size_t n) { /* (menu: a versao na aba Geral) */
+    local_version(out, n);
+}
+
 /* "v1.0.5", "1.0.5-teste2" -> 1, 0, 5 (o resto e ignorado) */
 static void parse_ver(const char* s, int v[3]) {
     int i;
