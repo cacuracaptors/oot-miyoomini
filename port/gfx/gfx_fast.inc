@@ -472,8 +472,8 @@ int gx_mistura_desliza = 2; /* (padrao 2 desde o lote 188: medido no lago Hylia,
 /* (ligadas por padrao desde o lote 248: medido no aparelho, ~3-5% a mais de largura no lago Hylia e no Dominio Zora) */
 int gx_agua_meia = 1;
 int gx_mistura_meia = 1;
-int gx_amp_meia = 0;    /* lote 249: texturas ampliadas (half_res_magnified) */
-int gx_transp_meia = 0; /* lote 249: transparencias com profundidade (half_res_transparent) */
+int gx_amp_meia = 1;    /* lote 249: texturas ampliadas (half_res_magnified); ligada desde o lote 250 (Kakariko: +2% de largura) */
+int gx_transp_meia = 1; /* lote 249: transparencias com profundidade (half_res_transparent); ligada desde o lote 251 */
 typedef struct {
     int sizeS, sizeT;   /* textura misturada */
     int raS, raT;       /* passo da 1a textura por texel da grade, em 1/64 de texel (64 = mesma grade) */
@@ -2508,8 +2508,8 @@ static void fused_check(FastProg *f) {
                          !f->t[0].hdPoint;
         const int agua = gx_agua_meia && f->needMem && !f->useT[1] && f->t[0].modeS == 0 && f->t[0].modeT == 0;
         const int mist = gx_mistura_meia && f->useT[1] && f->sampn[1] != NULL && !f->t[1].hdPoint;
-        /* lote 249: transparencias com profundidade (fumaca, neblina, efeitos; opcao half_res_transparent) e, em
-         * qualquer superficie, os trechos em que cada ponto da textura cobre 2 pixels ou mais na horizontal: ali ler
+        /* lote 249: transparencias com profundidade (fumaca, poeira, efeitos; opcao half_res_transparent: na abertura,
+         * menos quadros lentos quando a poeira da Epona cobre a tela) e, em qualquer superficie, os trechos em que cada ponto da textura cobre 2 pixels ou mais na horizontal: ali ler
          * um ponto a cada 2 pixels da quase a mesma imagem (opcao half_res_magnified; ver span_magnified) */
         const int dois = !f->useT[1] || (f->sampn[1] != NULL && !f->t[1].hdPoint);
         const int transp = gx_transp_meia && f->needMem && dois;
