@@ -99,6 +99,7 @@ typedef struct {
     int bl[2][4];
     int needMem;
     int meia2; /* texturas lidas em metade dos pixels de cada linha (opcoes half_res_water / half_res_blend) */
+    int meiaAmp; /* ...so nos trechos em que a textura aparece ampliada 2x ou mais (opcao half_res_magnified) */
     int dead;                   /* alfa constante reprovado no teste: a primitiva nao desenha nada */
     uint32_t needV;             /* bit i = o combinador le V[i] */
     int needShade[4];
@@ -471,6 +472,8 @@ int gx_mistura_desliza = 2; /* (padrao 2 desde o lote 188: medido no lago Hylia,
 /* (ligadas por padrao desde o lote 248: medido no aparelho, ~3-5% a mais de largura no lago Hylia e no Dominio Zora) */
 int gx_agua_meia = 1;
 int gx_mistura_meia = 1;
+int gx_amp_meia = 0;    /* lote 249: texturas ampliadas (half_res_magnified) */
+int gx_transp_meia = 0; /* lote 249: transparencias com profundidade (half_res_transparent) */
 typedef struct {
     int sizeS, sizeT;   /* textura misturada */
     int raS, raT;       /* passo da 1a textura por texel da grade, em 1/64 de texel (64 = mesma grade) */
@@ -2505,7 +2508,13 @@ static void fused_check(FastProg *f) {
                          !f->t[0].hdPoint;
         const int agua = gx_agua_meia && f->needMem && !f->useT[1] && f->t[0].modeS == 0 && f->t[0].modeT == 0;
         const int mist = gx_mistura_meia && f->useT[1] && f->sampn[1] != NULL && !f->t[1].hdPoint;
-        f->meia2 = base && (agua || mist);
+        /* lote 249: transparencias com profundidade (fumaca, neblina, efeitos; opcao half_res_transparent) e, em
+         * qualquer superficie, os trechos em que cada ponto da textura cobre 2 pixels ou mais na horizontal: ali ler
+         * um ponto a cada 2 pixels da quase a mesma imagem (opcao half_res_magnified; ver span_magnified) */
+        const int dois = !f->useT[1] || (f->sampn[1] != NULL && !f->t[1].hdPoint);
+        const int transp = gx_transp_meia && f->needMem && dois;
+        f->meia2 = base && (agua || mist || transp);
+        f->meiaAmp = base && dois && gx_amp_meia && !f->meia2;
     }
 }
 
@@ -3114,6 +3123,35 @@ static inline int tex_meia(SampNFn fn, const FastTex *u, const float *S, const f
 
 /* uma versao por forma do blender (gsel = BLM * 2 + le a memoria): funcoes menores, o compilador guarda
  * mais coisas em registradores e cada trecho comeca mais barato */
+/* opcao half_res_magnified: a textura aparece ampliada 2x ou mais na horizontal no trecho (nas 2 pontas: com
+ * perspectiva, a ampliacao muda ao longo da linha). S e T estao em 1/32 de texel antes da escala da tile. */
+static int span_magnified(const GxPrim *p, const FastProg *f, const float *rowF, int qOne, int xs, int xe) {
+    int e, k;
+    for (e = 0; e < 2; e++) {
+        const float fx = (float)(e ? xe - 1 : xs) - p->fx0;
+        float dS = p->fdx[0], dT = p->fdx[1];
+        if (!qOne) {
+            const float s = rowF[0] + p->fdx[0] * fx, t = rowF[1] + p->fdx[1] * fx, q = rowF[2] + p->fdx[2] * fx;
+            float iq;
+            if (q > -1e-6f && q < 1e-6f) {
+                return 0;
+            }
+            iq = 1.0f / q;
+            dS = (p->fdx[0] - s * iq * p->fdx[2]) * iq;
+            dT = (p->fdx[1] - t * iq * p->fdx[2]) * iq;
+        }
+        for (k = 0; k < 2; k++) {
+            if (f->useT[k]) {
+                const float a = dS * f->t[k].scaleS, b = dT * f->t[k].scaleT;
+                if (a * a + b * b > 16.0f * 16.0f) { /* (mais de meio texel por pixel) */
+                    return 0;
+                }
+            }
+        }
+    }
+    return 1;
+}
+
 static inline __attribute__((always_inline)) void span_fused_tpl(const GxPrim *p, const FastProg *f, FastCtx *ctx, int y,
                                                                  int xs, int xe, const int GS, const int NCH) {
     uint8x8_t *const R = ctx->R;
@@ -3133,6 +3171,8 @@ static inline __attribute__((always_inline)) void span_fused_tpl(const GxPrim *p
         sc.rowF[k] = p->f0[k] + p->fdy[k] * ((float)y - p->fy0);
     }
     sc.qOne = p->fdx[2] == 0.0f && p->fdy[2] == 0.0f && p->f0[2] == 1.0f;
+    const int half = (f->meia2 || (f->meiaAmp && span_magnified(p, f, sc.rowF, sc.qOne, xs, xe))) && p->hasTex &&
+                     !gx_fast_exact;
     for (k = 0; k < 5; k++) {
         sc.base[k] = (uint32_t)(int32_t)(p->c[k] + (int64_t)p->dy[k] * y + (int64_t)p->dx[k] * xs);
     }
@@ -3230,7 +3270,7 @@ static inline __attribute__((always_inline)) void span_fused_tpl(const GxPrim *p
             continue;
         }
         /* --- 2. texturas dos grupos vivos --- */
-        if (f->meia2 && p->hasTex && !gx_fast_exact) {
+        if (half) {
             /* meia resolucao: 4 pontos de textura por grupo, cada um vale para 2 pixels vizinhos */
             float S[4 * NCH + 8], T[4 * NCH + 8];
             uint32_t tmp[4 * NCH + 8];
