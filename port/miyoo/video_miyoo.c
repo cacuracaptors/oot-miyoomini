@@ -810,6 +810,8 @@ static void ge_init(void) {
     fprintf(stderr, "video: 2D pelo MI_GFX desligado (sem memoria MMA)\n");
 }
 
+static int g_geClipLogged;
+
 /* tela: as pecas da imagem 'key' por cima da pagina 'back' (depois da imagem); espera o MI_GFX acabar */
 static void ge_draw(const void* key, int back, int imgW, int imgH) {
     const GxGeItem* it;
@@ -843,10 +845,35 @@ static void ge_draw(const void* key, int back, int imgW, int imgH) {
             if (x1 <= x0 || y1 <= y0) {
                 continue;
             }
-            dr.s32Xpos = x0;
-            dr.s32Ypos = y0;
-            dr.u32Width = (MI_U32)(x1 - x0);
-            dr.u32Height = (MI_U32)(y1 - y0);
+            int cx0 = x0, cx1 = x1, cy0 = y0, cy1 = y1;
+            /* lote 255: a escala em y (largura/altura da imagem) pode passar da tela: uma peca que vai ate a ultima linha
+             * da imagem de 640x477 caia em y = 564 na tela de 560 linhas (a tela cheia do clarao dos raios, na cena do
+             * pesadelo, travou o Mini Flip). A peca e cortada na tela, e a origem na mesma proporcao. */
+            cx0 = cx0 < 0 ? 0 : cx0;
+            cy0 = cy0 < 0 ? 0 : cy0;
+            cx1 = cx1 > PANEL_W ? PANEL_W : cx1;
+            cy1 = cy1 > PANEL_H ? PANEL_H : cy1;
+            if (cx1 <= cx0 || cy1 <= cy0) {
+                continue;
+            }
+            if (cx0 != x0 || cx1 != x1 || cy0 != y0 || cy1 != y1) {
+                const float fx = (float)it[i].sw / (float)(x1 - x0), fy = (float)it[i].sh / (float)(y1 - y0);
+                const int s0 = (int)((float)(cx0 - x0) * fx + 0.5f), s1 = (int)((float)(cx1 - x0) * fx + 0.5f);
+                const int t0 = (int)((float)(cy0 - y0) * fy + 0.5f), t1 = (int)((float)(cy1 - y0) * fy + 0.5f);
+                sr.s32Xpos = 1 + s0;
+                sr.s32Ypos = 1 + t0;
+                sr.u32Width = (MI_U32)(s1 > s0 ? s1 - s0 : 1);
+                sr.u32Height = (MI_U32)(t1 > t0 ? t1 - t0 : 1);
+                if (!g_geClipLogged) {
+                    g_geClipLogged = 1;
+                    fprintf(stderr, "video: peca do 2D passava da tela (%d,%d..%d,%d em %dx%d): cortada\n", x0, y0, x1, y1,
+                            PANEL_W, PANEL_H);
+                }
+            }
+            dr.s32Xpos = cx0;
+            dr.s32Ypos = cy0;
+            dr.u32Width = (MI_U32)(cx1 - cx0);
+            dr.u32Height = (MI_U32)(cy1 - cy0);
         }
         if (!ge_place) { /* (a tela e de cabeca para baixo: o lugar girado aqui) */
             dr.s32Xpos = PANEL_W - dr.s32Xpos - (int)dr.u32Width;
