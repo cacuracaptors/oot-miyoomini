@@ -65,7 +65,7 @@ ES = {
     "remember_save_location": ("Recordar dónde guardaste",
                                "Activado: al cargar la partida, Link empieza en la última entrada por la que pasó (no en grutas ni fuentes de hadas; las mazmorras funcionan como en el original). Desactivado: como el original (casa de Link / Templo del Tiempo)."),
     "remember_save_location_dungeons": ("Recordar dónde guardaste (mazmorras)",
-                                        "Activado: al cargar una partida guardada dentro de una mazmorra, Link empieza en la sala y en el lugar donde guardaste (si estaba en suelo firme; si no, en la entrada de la mazmorra, como en el original; las salas de los jefes también como en el original). Desactivado: como en el original (entrada de la mazmorra)."),
+                                        "Activado: al cargar una partida guardada dentro de una mazmorra, Link empieza en la entrada de la sala donde guardaste (por donde entró en ella), con los enemigos de vuelta en su sitio (las salas de los jefes, como en el original). Desactivado: como en el original (entrada de la mazmorra)."),
     "gs_token_count": ("Contar Skulltulas Doradas",
                        "Activado: el mensaje del símbolo de Skulltula Dorada muestra cuántos llevas (N/100)."),
     "heart_piece_count": ("Contar Piezas de Corazón",

@@ -353,7 +353,7 @@ static const struct {
     { "Enhancements", "remember_save_location", "", &port_opt_remember_save_location,
       "1 = when loading a save, Link starts at the last entrance he went through (not in grottos or fairy fountains; dungeons work as in the original); 0 = like the original (Link's house / Temple of Time)" },
     { "Enhancements", "remember_save_location_dungeons", "", &port_opt_remember_save_location_dungeons,
-      "1 = when loading a save made inside a dungeon, Link starts in the room and at the spot where you saved (if he was standing on solid ground; otherwise at the dungeon entrance, as in the original; boss rooms also work as in the original); 0 = like the original (dungeon entrance)" },
+      "1 = when loading a save made inside a dungeon, Link starts at the entrance of the room where you saved (where he came into it), with its enemies back in their places (boss rooms work as in the original); 0 = like the original (dungeon entrance)" },
     { "Enhancements", "gs_token_count", "", &port_opt_gs_token_count,
       "1 = the Gold Skulltula Token message shows how many you have collected (N/100)" },
     { "Enhancements", "heart_piece_count", "", &port_opt_heart_piece_count,

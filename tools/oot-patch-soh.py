@@ -3458,11 +3458,11 @@ patch_file("src/overlays/misc/ovl_kaleido_scope/z_kaleido_scope.c", [
 
 # ---------------------------------------------------------------- lote 256
 # Lembrar onde salvou nas masmorras (opcao remember_save_location_dungeons): o jogo original sempre recomeca na
-# entrada da masmorra. Aqui, ao salvar (menu de pausa ou salvamento automatico), o lugar do Link vai junto no save,
-# em playerData.unk_58 (14 bytes que o jogo nao usa): marca, cena, sala, posicao, direcao e o modo de comeco. Ao
-# carregar, se o save e de uma masmorra (nao das salas dos chefes) e a opcao esta ligada, o Link comeca ali pelo mesmo
-# caminho da volta de uma queda no vazio (respawn DOWN), sem perder coracao. So guarda se o Link esta parado em chao
-# firme da cena (nada de ar, agua ou plataforma que se mexe); senao, ou no save do "game over", vale o original.
+# entrada da masmorra. Aqui, ao salvar (menu de pausa ou salvamento automatico), vai junto no save, em
+# playerData.unk_58 (14 bytes que o jogo nao usa), a entrada da sala em que o Link esta: o ponto por onde ele entrou
+# nela, o mesmo da volta de uma queda no vazio (respawn DOWN). Nao a posicao exata: ali ele podia comecar colado num
+# inimigo (os inimigos voltam ao carregar). Ao carregar, se o save e de uma masmorra (nao das salas dos chefes) e a
+# opcao esta ligada, o Link comeca nesse ponto, sem perder coracao. No save do "game over" vale o original.
 PORT_DGN = r"""
 /* port: lembrar onde salvou nas masmorras (tools/oot-patch-soh.py, lote 256) */
 #define PORT_DGN_MARK 0xD5
@@ -3470,27 +3470,22 @@ s32 port_dgn_pending;
 
 void Port_DgnStore(PlayState* play) {
     u8* d = (u8*)gSaveContext.save.info.playerData.unk_58;
-    Player* player = GET_PLAYER(play);
-    Actor* pa;
+    RespawnData* r = &gSaveContext.respawn[RESPAWN_MODE_DOWN];
     s16 v[5];
     s32 i;
 
     d[0] = 0;
-    if (player == NULL) {
-        return;
+    if ((r->entranceIndex < 0) || (r->entranceIndex >= ENTR_MAX) ||
+        (gEntranceTable[r->entranceIndex].sceneId != play->sceneId)) {
+        return; /* (sem ponto de entrada desta cena: carrega na entrada da masmorra, como no original) */
     }
-    pa = &player->actor;
-    if (!(pa->bgCheckFlags & BGCHECKFLAG_GROUND) || (pa->floorBgId != BGCHECK_SCENE) ||
-        (play->roomCtx.curRoom.num < 0)) {
-        return;
-    }
-    v[0] = (s16)pa->world.pos.x;
-    v[1] = (s16)pa->world.pos.y;
-    v[2] = (s16)pa->world.pos.z;
-    v[3] = pa->shape.rot.y;
-    v[4] = (play->roomCtx.curRoom.environmentType < 4) ? 0x0DFF : (0x0D00 | GET_ACTIVE_CAM(play)->bgCamIndex);
+    v[0] = (s16)r->pos.x;
+    v[1] = (s16)r->pos.y;
+    v[2] = (s16)r->pos.z;
+    v[3] = r->yaw;
+    v[4] = r->playerParams;
     d[1] = (u8)play->sceneId;
-    d[2] = (u8)play->roomCtx.curRoom.num;
+    d[2] = r->roomIndex;
     d[3] = 0;
     for (i = 0; i < 5; i++) {
         d[4 + 2 * i] = v[i] & 0xFF;
