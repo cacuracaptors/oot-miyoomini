@@ -1927,6 +1927,7 @@ patch_file("src/code/z_play.c", [
     sFrames = 0;
     Play_SaveSceneFlags(play);
     gSaveContext.save.info.playerData.savedSceneId = play->sceneId;
+    Port_DgnStore(play); /* (lembrar onde salvou nas masmorras) */
     /* o B das minigames/da Epona volta ao normal no save, como o menu de pausa faz */
     prevB = gSaveContext.save.info.equips.buttonItems[0];
     prevStatus = gSaveContext.buttonStatus[0];
@@ -3453,4 +3454,137 @@ patch_file("src/overlays/misc/ovl_kaleido_scope/z_kaleido_scope.c", [
      "            Port_LangExtraTex(2, sToPlayMelodyTextTextures[LANGUAGE_ENG], &sToPlayMelodyTextWidths[LANGUAGE_ENG]);\n"
      "    }\n"
      "    stepR = ABS(sLRSelectedPrimR - sLRSelectedPrimColors[sLRSelectedPrimState][0]) / sLRSelectedPrimTimer;\n"),
+])
+
+# ---------------------------------------------------------------- lote 256
+# Lembrar onde salvou nas masmorras (opcao remember_save_location_dungeons): o jogo original sempre recomeca na
+# entrada da masmorra. Aqui, ao salvar (menu de pausa ou salvamento automatico), o lugar do Link vai junto no save,
+# em playerData.unk_58 (14 bytes que o jogo nao usa): marca, cena, sala, posicao, direcao e o modo de comeco. Ao
+# carregar, se o save e de uma masmorra (nao das salas dos chefes) e a opcao esta ligada, o Link comeca ali pelo mesmo
+# caminho da volta de uma queda no vazio (respawn DOWN), sem perder coracao. So guarda se o Link esta parado em chao
+# firme da cena (nada de ar, agua ou plataforma que se mexe); senao, ou no save do "game over", vale o original.
+PORT_DGN = r"""
+/* port: lembrar onde salvou nas masmorras (tools/oot-patch-soh.py, lote 256) */
+#define PORT_DGN_MARK 0xD5
+s32 port_dgn_pending;
+
+void Port_DgnStore(PlayState* play) {
+    u8* d = (u8*)gSaveContext.save.info.playerData.unk_58;
+    Player* player = GET_PLAYER(play);
+    Actor* pa;
+    s16 v[5];
+    s32 i;
+
+    d[0] = 0;
+    if (player == NULL) {
+        return;
+    }
+    pa = &player->actor;
+    if (!(pa->bgCheckFlags & BGCHECKFLAG_GROUND) || (pa->floorBgId != BGCHECK_SCENE) ||
+        (play->roomCtx.curRoom.num < 0)) {
+        return;
+    }
+    v[0] = (s16)pa->world.pos.x;
+    v[1] = (s16)pa->world.pos.y;
+    v[2] = (s16)pa->world.pos.z;
+    v[3] = pa->shape.rot.y;
+    v[4] = (play->roomCtx.curRoom.environmentType < 4) ? 0x0DFF : (0x0D00 | GET_ACTIVE_CAM(play)->bgCamIndex);
+    d[1] = (u8)play->sceneId;
+    d[2] = (u8)play->roomCtx.curRoom.num;
+    d[3] = 0;
+    for (i = 0; i < 5; i++) {
+        d[4 + 2 * i] = v[i] & 0xFF;
+        d[5 + 2 * i] = (v[i] >> 8) & 0xFF;
+    }
+    d[0] = PORT_DGN_MARK;
+}
+
+/* antes de montar a cena (Play_Init): o Link comeca no lugar guardado (Sram_OpenSave marcou port_dgn_pending) */
+static void Port_DgnApply(PlayState* play) {
+    extern int port_tt_novoid;
+    u8* d = (u8*)gSaveContext.save.info.playerData.unk_58;
+    RespawnData* r = &gSaveContext.respawn[RESPAWN_MODE_DOWN];
+    s16 v[5];
+    s32 i;
+
+    if (!port_dgn_pending) {
+        return;
+    }
+    port_dgn_pending = 0;
+    if ((gSaveContext.gameMode != GAMEMODE_NORMAL) || (gSaveContext.save.cutsceneIndex >= CS_INDEX_0) ||
+        (d[0] != PORT_DGN_MARK) || (gEntranceTable[((void)0, gSaveContext.save.entranceIndex)].sceneId != d[1])) {
+        return;
+    }
+    for (i = 0; i < 5; i++) {
+        v[i] = (s16)(d[4 + 2 * i] | (d[5 + 2 * i] << 8));
+    }
+    gSaveContext.respawnFlag = 1;
+    r->entranceIndex = gSaveContext.save.entranceIndex;
+    r->roomIndex = d[2];
+    r->pos.x = v[0];
+    r->pos.y = v[1];
+    r->pos.z = v[2];
+    r->yaw = v[3];
+    r->playerParams = v[4];
+    r->tempSwchFlags = 0;
+    r->tempCollectFlags = 0;
+    gSaveContext.entranceSpeed = 0.0f;
+    port_tt_novoid = 1; /* (comecar ali nao tira coracao, como a volta de uma queda tiraria) */
+}
+
+"""
+patch_file("src/code/z_play.c", [
+    ("lembrar onde salvou nas masmorras: funcoes",
+     "void Play_Init(GameState* thisx) {\n",
+     PORT_DGN + "void Play_Init(GameState* thisx) {\n"),
+    ("lembrar onde salvou nas masmorras: comeco no lugar guardado",
+     "    Play_SpawnScene(\n        this, gEntranceTable[",
+     "    Port_DgnApply(this); /* port: lembrar onde salvou nas masmorras */\n"
+     "    Play_SpawnScene(\n        this, gEntranceTable["),
+])
+patch_file("src/code/z_sram.c", [
+    ("lembrar onde salvou nas masmorras: teste",
+     "void Sram_OpenSave(SramContext* sramCtx) {\n",
+     "/* port: lembrar onde salvou nas masmorras (o lugar foi guardado por Port_DgnStore, z_play.c) */\n"
+     "static s32 Port_DgnResumeOk(void) {\n"
+     "    extern int port_opt_remember_save_location_dungeons;\n"
+     "    extern s32 port_dgn_pending;\n"
+     "    u8* d = (u8*)gSaveContext.save.info.playerData.unk_58;\n"
+     "    s32 entr = gSaveContext.save.entranceIndex;\n\n"
+     "    if (!port_opt_remember_save_location_dungeons || (d[0] != 0xD5) ||\n"
+     "        (d[1] != gSaveContext.save.info.playerData.savedSceneId) || (entr < 0) || (entr >= ENTR_MAX) ||\n"
+     "        (gEntranceTable[entr].sceneId != d[1])) {\n"
+     "        return false;\n"
+     "    }\n"
+     "    port_dgn_pending = 1;\n"
+     "    return true;\n"
+     "}\n\n"
+     "void Sram_OpenSave(SramContext* sramCtx) {\n"),
+    ("lembrar onde salvou nas masmorras: fica na entrada guardada",
+     "        case SCENE_INSIDE_GANONS_CASTLE:\n"
+     "            gSaveContext.save.entranceIndex = sDungeonEntrances[gSaveContext.save.info.playerData.savedSceneId];\n",
+     "        case SCENE_INSIDE_GANONS_CASTLE:\n"
+     "            if (Port_DgnResumeOk()) { /* port */\n"
+     "                break;\n"
+     "            }\n"
+     "            gSaveContext.save.entranceIndex = sDungeonEntrances[gSaveContext.save.info.playerData.savedSceneId];\n"),
+])
+patch_file("src/overlays/misc/ovl_kaleido_scope/z_kaleido_scope.c", [
+    ("lembrar onde salvou nas masmorras: save do menu de pausa",
+     "                            gSaveContext.save.info.playerData.savedSceneId = play->sceneId;\n"
+     "                            Sram_WriteSave(&play->sramCtx);\n",
+     "                            gSaveContext.save.info.playerData.savedSceneId = play->sceneId;\n"
+     "                            { /* port: lembrar onde salvou nas masmorras */\n"
+     "                                extern void Port_DgnStore(PlayState* play);\n"
+     "                                Port_DgnStore(play);\n"
+     "                            }\n"
+     "                            Sram_WriteSave(&play->sramCtx);\n"),
+    ("lembrar onde salvou nas masmorras: save do game over (vale o original)",
+     "                    pauseCtx->promptChoice = 0;\n"
+     "                    Play_SaveSceneFlags(play);\n"
+     "                    gSaveContext.save.info.playerData.savedSceneId = play->sceneId;\n",
+     "                    pauseCtx->promptChoice = 0;\n"
+     "                    Play_SaveSceneFlags(play);\n"
+     "                    gSaveContext.save.info.playerData.savedSceneId = play->sceneId;\n"
+     "                    gSaveContext.save.info.playerData.unk_58[0] = 0; /* port: lembrar onde salvou (masmorras) */\n"),
 ])

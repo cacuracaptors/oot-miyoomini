@@ -52,6 +52,7 @@ int port_opt_retro_brightness_base = -1; /* brilho de antes do filtro retro (men
 int port_opt_halo_folga = 600;   /* folga do teste de profundidade dos halos de luz (z do jogo, 15.3) */
 /* melhorias do Ship of Harkinian (tools/oot-patch-soh.py) */
 int port_opt_remember_save_location = 0;
+int port_opt_remember_save_location_dungeons = 0;
 int port_opt_gs_token_count = 0;
 int port_opt_heart_piece_count = 0;
 int port_opt_heart_container_count = 0;
@@ -351,6 +352,8 @@ static const struct {
     /* Ship of Harkinian enhancements (Enhancements > Quality) */
     { "Enhancements", "remember_save_location", "", &port_opt_remember_save_location,
       "1 = when loading a save, Link starts at the last entrance he went through (not in grottos or fairy fountains; dungeons work as in the original); 0 = like the original (Link's house / Temple of Time)" },
+    { "Enhancements", "remember_save_location_dungeons", "", &port_opt_remember_save_location_dungeons,
+      "1 = when loading a save made inside a dungeon, Link starts in the room and at the spot where you saved (if he was standing on solid ground; otherwise at the dungeon entrance, as in the original; boss rooms also work as in the original); 0 = like the original (dungeon entrance)" },
     { "Enhancements", "gs_token_count", "", &port_opt_gs_token_count,
       "1 = the Gold Skulltula Token message shows how many you have collected (N/100)" },
     { "Enhancements", "heart_piece_count", "", &port_opt_heart_piece_count,
@@ -862,6 +865,7 @@ static const struct {
     { "disable_crit_wiggle", 0 },
     { "camera_distance", 100 },
     { "remember_save_location", 0 },
+    { "remember_save_location_dungeons", 0 },
     { "gs_token_count", 0 },
     { "heart_piece_count", 0 },
     { "heart_container_count", 0 },

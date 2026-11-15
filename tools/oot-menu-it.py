@@ -68,6 +68,8 @@ IT = {
                  "Distanza della telecamera che segue Link (camminata, Z, salto, nuoto, mira), in % dell'originale: 70 = più vicina, 130 = più lontana. Le scene e le telecamere fisse di alcune stanze restano come nell'originale. Più lontana mostra più scenario (un po' più di lavoro di disegno). Vale quando la telecamera cambia modalità (fermarsi, correre, Z...)."),
     "remember_save_location": ("Ricordare il luogo del salvataggio",
                                "Attivo: caricando la partita, Link comincia dall'ultimo ingresso attraversato (dungeon come l'originale). Disattivo: comincia a casa o al Tempio del Tempo, come l'originale."),
+    "remember_save_location_dungeons": ("Ricordare il luogo del salvataggio (dungeon)",
+                                        "Attivo: caricando una partita salvata in un dungeon, Link comincia nella stanza e nel punto in cui avete salvato (se era su terreno solido; altrimenti all'ingresso del dungeon, come l'originale; anche le stanze dei boss come l'originale). Disattivo: come l'originale (ingresso del dungeon)."),
     "gs_token_count": ("Contatore Skulltula d'oro",
                        "Attivo: raccogliendo un simbolo di Skulltula d'oro, il messaggio dice quanti ne avete (N/100)."),
     "heart_piece_count": ("Contatore pezzi di cuore",

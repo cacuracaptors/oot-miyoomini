@@ -127,6 +127,7 @@ static const Item k_items[] = {
     T(TAB_ENH, "low_health_beep", "Low health beep", "Alarme de vida baixa"),
     T(TAB_ENH, "disable_crit_wiggle", "No camera wiggle at low health", "Sem tremor com vida baixa"),
     T(TAB_ENH, "remember_save_location", "Remember save location", "Lembrar onde salvou"),
+    T(TAB_ENH, "remember_save_location_dungeons", "Remember save location (dungeons)", "Lembrar onde salvou (masmorras)"),
     T(TAB_ENH, "gs_token_count", "Gold Skulltula count", "Contagem de Skulltulas"),
     T(TAB_ENH, "heart_piece_count", "Piece of Heart count", "Contagem de pedaços de coração"),
     T(TAB_ENH, "heart_container_count", "Heart Container count", "Contagem de containers"),
