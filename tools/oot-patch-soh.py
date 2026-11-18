@@ -1227,6 +1227,12 @@ patch_file("src/overlays/actors/ovl_Fishing/z_fishing.c", [
      "                (((sLureTimer & 0x7F) == 0) && (Rand_ZeroOne() < 0.05f) && (sLureEquipped != FS_LURE_SINKING) &&\n",
      "                (!" + O("fishing_fish_never_escape") + " && /* port: SoH FishNeverEscape */\n"
      "                 ((sLureTimer & 0x7F) == 0) && (Rand_ZeroOne() < 0.05f) && (sLureEquipped != FS_LURE_SINKING) &&\n"),
+    # o puxao para fisgar exigia o analogico saltar de acima de -40 para abaixo de -50 num quadro so; com o
+    # direcional suave (vindo de ESQUERDA/DIREITA, a direcao gira aos poucos) um quadro caia no meio e o puxao
+    # se perdia. Agora basta o analogico passar de -50 naquele quadro (o A continua igual)
+    ("fisgar com BAIXO",
+     "                if (((input->rel.stick_y < -50) && (sStickAdjYPrev > -40)) ||\n",
+     "                if (((input->rel.stick_y < -50) && (sStickAdjYPrev >= -50)) || /* port: fisgar com BAIXO */\n"),
 ])
 
 # ---------------------------------------------------------------- Cheats (todos desligados por padrao)
