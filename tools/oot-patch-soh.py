@@ -3603,3 +3603,13 @@ patch_file("src/code/z_play.c", [
      "                            (portFishPlayer->heldItemAction == PLAYER_IA_FISHING_POLE);\n"
      "    }\n"),
 ])
+
+
+# lote 261: a pesca checa um numero que o chip CIC do cartucho deixa na RAM no boot (gCICBootMagic0); no port ele nao
+# existe (le zero), entao a trava anti-pirataria ligava: a linha nao recolhia com o peixe fisgado e ele sempre
+# escapava depois de 50 quadros. O jogo de verdade (cartucho original) nunca tem a trava.
+patch_file("src/overlays/actors/ovl_Fishing/z_fishing.c", [
+    ("pesca: sem a trava anti-pirataria",
+     "        sReelLock = !CIC_BOOT_MAGIC0_IS_CORRECT();\n",
+     "        sReelLock = 0; /* port: sem o chip CIC, a trava anti-pirataria ligava sempre */\n"),
+])
