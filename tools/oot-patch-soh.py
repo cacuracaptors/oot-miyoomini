@@ -3589,3 +3589,17 @@ patch_file("src/overlays/misc/ovl_kaleido_scope/z_kaleido_scope.c", [
      "                    gSaveContext.save.info.playerData.savedSceneId = play->sceneId;\n"
      "                    gSaveContext.save.info.playerData.unk_58[0] = 0; /* port: lembrar onde salvou (masmorras) */\n"),
 ])
+
+
+# lote 260: pesca com botoes proprios (port/miyoo/input_miyoo.c): o jogo avisa quando Link esta com a vara na mao
+patch_file("src/code/z_play.c", [
+    ("pesca: vara na mao",
+     "    Port_Cheats(this); /* port: cheats do SoH */\n",
+     "    Port_Cheats(this); /* port: cheats do SoH */\n"
+     "    { /* port: pesca - Link com a vara na mao na casa de pesca (input_miyoo.c troca os botoes) */\n"
+     "        extern int port_fishing_mode;\n"
+     "        Player* portFishPlayer = GET_PLAYER(this);\n"
+     "        port_fishing_mode = (this->sceneId == SCENE_FISHING_POND) && (portFishPlayer != NULL) &&\n"
+     "                            (portFishPlayer->heldItemAction == PLAYER_IA_FISHING_POLE);\n"
+     "    }\n"),
+])

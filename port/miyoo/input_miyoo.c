@@ -85,6 +85,8 @@ static long long mono_ms(void) {
 }
 
 int port_opt_direcional_suave = 40; /* opcoes.txt: ms para a direcao girar 45 graus (0 = desligado) */
+int port_fishing_mode;  /* z_play.c (oot-patch-soh.py), a cada quadro: Link com a vara na mao na casa de pesca */
+static int s_fishing;   /* botoes da pesca valendo nesta leitura (o direcional fica sem o giro suave) */
 static int ev_fd = -1;
 static unsigned char held[K_COUNT];
 static unsigned char down_any[KEY_MAX / 8 + 1]; /* todas as teclas apertadas agora */
@@ -509,6 +511,25 @@ static void read_pads(OSContPad pads[4]) {
             }
         }
     }
+    /* lote 260: pesca (Link com a vara na mao na casa de pesca; o jogo avisa em port_fishing_mode a cada quadro), como
+     * na ocarina: B (ou Y) = B do N64 (lancar a isca, o que a tela pede), A = A (recolher e fisgar), R1 = R (com o A,
+     * recolhe mais rapido), L1 = Z (camera na isca), X = puxao para fisgar (o analogico para baixo). O direcional mexe a
+     * isca sem o giro suave (responde na hora, e o puxao para baixo nunca se perde). Com SELECT apertado, os atalhos de
+     * sempre. */
+    s_fishing = port_fishing_mode && (port_input_frames - port_jump_stamp) <= 12 && !held[K_SELECT];
+    if (s_fishing) {
+        b &= ~(PORT_BTN_A | PORT_BTN_B | PORT_BTN_R | PORT_BTN_Z | PORT_BTN_CDOWN);
+        if (held[K_A]) b |= PORT_BTN_A;
+        if (held[K_B] || held[K_Y]) b |= PORT_BTN_B;
+        if (held[K_R1]) b |= PORT_BTN_R;
+        if (held[K_L1]) b |= PORT_BTN_Z;
+        if (held[K_X]) {
+            dx = 0;
+            dy = -1;
+        }
+        port_input_jump = 0;
+        port_input_slow = 0;
+    }
     if (menu_down) {
         b = 0; /* nada chega ao jogo enquanto o MENU esta apertado */
         dx = dy = 0;
@@ -526,7 +547,7 @@ static void read_pads(OSContPad pads[4]) {
     }
 
     pads[0].button = b;
-    if (port_opt_direcional_suave > 0) {
+    if (port_opt_direcional_suave > 0 && !s_fishing) {
         /* direcional_suave: so a DIRECAO gira aos poucos (45 graus a cada N ms) ate a do direcional; a forca
          * (76, a mesma nas 8 direcoes) e a parada sao na hora. Partindo do zero ou virando mais de 90 graus
          * (meia-volta), vai direto, como o analogico de verdade passando pelo meio. */
