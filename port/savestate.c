@@ -960,8 +960,8 @@ static void exit_without_state(int kind) {
     }
     fprintf(stderr, "[estado] fechando sem estado\n");
     if (kind == EXIT_RESET) { /* reiniciar do comeco: sem estado para continuar */
-        remove(AUTO_STATE);
-        remove(BOOT_RESUME);
+        remove(g_autoState);
+        remove(g_bootResume);
         restart_now();
     }
     if (kind == EXIT_RESTART) { /* (fora do jogo: so abre de novo, do inicio) */

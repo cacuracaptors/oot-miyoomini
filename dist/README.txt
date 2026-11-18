@@ -117,6 +117,10 @@ FILES
   options.txt ......... all the options of the port (also in Menu+Start)
   saves/ .............. the game's save and save states from versions before
                         per-profile saves (kept as a backup)
+  idiomas/ ............ language packs
+  log.txt ............. the game's log - please attach it to bug reports
+  version.txt ......... the installed version (for Check for updates)
+  cacert.pem .......... certificates for the update check (Mozilla, MPL-2.0)
 
 SAVES
 -----
@@ -125,10 +129,6 @@ Saves/CurrentProfile/saves/ZeldaOoT on the SD card, so OnionOS's Guest Mode
 (and apps such as Kids Mode) give each player their own. The first time a
 profile plays, the old saves/ folder above is copied into it (nothing there
 is ever overwritten, and saves/ is left as it was).
-  idiomas/ ............ language packs
-  log.txt ............. the game's log - please attach it to bug reports
-  version.txt ......... the installed version (for Check for updates)
-  cacert.pem .......... certificates for the update check (Mozilla, MPL-2.0)
 
 CREDITS
 -------
