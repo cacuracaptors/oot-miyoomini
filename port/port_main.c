@@ -42,6 +42,7 @@ extern int port_opt_idioma;
 #endif
 #include "gfx/gfx_priv.h"
 #include "os_hw.h"
+#include "savedir.h"
 
 /* gfx_hook.c */
 void gfx_install(void);
@@ -629,8 +630,15 @@ int main(int argc, char** argv) {
 #ifdef TARGET_MIYOO
     g_seconds = 0;   /* joga ate o MENU */
     gx_threads = 2;  /* os dois nucleos desenham */
-    sram = "saves/oot.sav";
-    mkdir("saves", 0755);
+    {
+        /* a pasta dos saves: a do perfil do OnionOS, migrada de ./saves (savedir.c) */
+        static char sramPath[PORT_PATH_MAX];
+        if (port_save_path(sramPath, sizeof sramPath, "oot.sav")) {
+            sram = sramPath;
+        } else {
+            sram = "saves/oot.sav";
+        }
+    }
     g_argv = argv;
     {
         const ssize_t n = readlink("/proc/self/exe", g_exePath, sizeof g_exePath - 1);
