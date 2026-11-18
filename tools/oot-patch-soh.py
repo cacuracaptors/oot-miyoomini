@@ -3613,3 +3613,41 @@ patch_file("src/overlays/actors/ovl_Fishing/z_fishing.c", [
      "        sReelLock = !CIC_BOOT_MAGIC0_IS_CORRECT();\n",
      "        sReelLock = 0; /* port: sem o chip CIC, a trava anti-pirataria ligava sempre */\n"),
 ])
+
+
+# lote 262: quadros intermediarios na pesca. Juncos, estacas, vitorias-regias, pedras e o cardume sao desenhados num
+# laco so, pulando os que estao fora da camera (shouldDraw). Com a camera se mexendo, um objeto entrava ou saia da
+# lista e as matrizes seguintes trocavam de par com o quadro anterior (a interpolacao casa pela ordem): o objeto
+# aparecia fora do lugar ou torto por um instante. Cada um vira um "filho" proprio, como os halos e os efeitos.
+patch_file("src/overlays/actors/ovl_Fishing/z_fishing.c", [
+    ("pesca: objeto do lago e um filho (abre)",
+     "            if (prop->shouldDraw) {\n",
+     "            if (prop->shouldDraw) {\n"
+     "                Port_FiOpenChild(prop, 0); /* port: este objeto, onde quer que esteja na lista */\n", 4),
+    ("pesca: junco (fecha)",
+     "                gSPDisplayList(POLY_XLU_DISP++, gFishingReedModelDL);\n",
+     "                gSPDisplayList(POLY_XLU_DISP++, gFishingReedModelDL);\n"
+     "                Port_FiCloseChild(); /* port */\n"),
+    ("pesca: estaca (fecha)",
+     "                gSPDisplayList(POLY_OPA_DISP++, gFishingWoodPostModelDL);\n",
+     "                gSPDisplayList(POLY_OPA_DISP++, gFishingWoodPostModelDL);\n"
+     "                Port_FiCloseChild(); /* port */\n"),
+    ("pesca: vitoria-regia (fecha)",
+     "                gSPDisplayList(POLY_XLU_DISP++, gFishingLilyPadModelDL);\n",
+     "                gSPDisplayList(POLY_XLU_DISP++, gFishingLilyPadModelDL);\n"
+     "                Port_FiCloseChild(); /* port */\n"),
+    ("pesca: pedra (fecha)",
+     "                gSPDisplayList(POLY_OPA_DISP++, gFishingRockModelDL);\n",
+     "                gSPDisplayList(POLY_OPA_DISP++, gFishingRockModelDL);\n"
+     "                Port_FiCloseChild(); /* port */\n"),
+    ("pesca: cardume e um filho",
+     "            if (fish->shouldDraw) {\n"
+     "                Matrix_Translate(fish->pos.x, fish->pos.y, fish->pos.z, MTXMODE_NEW);\n",
+     "            if (fish->shouldDraw) {\n"
+     "                Port_FiOpenChild(fish, 0); /* port: este peixe do cardume */\n"
+     "                Matrix_Translate(fish->pos.x, fish->pos.y, fish->pos.z, MTXMODE_NEW);\n"),
+    ("pesca: cardume (fecha)",
+     "                gSPDisplayList(POLY_OPA_DISP++, gFishingGroupFishModelDL);\n",
+     "                gSPDisplayList(POLY_OPA_DISP++, gFishingGroupFishModelDL);\n"
+     "                Port_FiCloseChild(); /* port */\n"),
+])
