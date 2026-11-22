@@ -5,8 +5,10 @@ A native port of [**zeldaret/oot**](https://github.com/zeldaret/oot) - the Ocari
 
 The Miyoo Mini Plus has no 3D GPU, so this port draws the game with a software renderer written for it:
 NEON-accelerated and spread over both CPU cores, with a dynamic resolution up to the full 640x480 screen. It plays
-the **USA 1.1 (Rev A)** version of Ocarina of Time, built from your own ROM, and can also add German and French
-from your European ROM.
+the **USA 1.1 (Rev A)** version of Ocarina of Time, built from your own ROM.
+
+**Languages:** English, Japanese, Spanish, Italian, Brazilian Portuguese, German and French (German and French
+come from your own European ROM; see [Languages](#languages)). Pick one in Menu+Start > General > Language.
 
 **[Download the latest release](../../releases)**
 
