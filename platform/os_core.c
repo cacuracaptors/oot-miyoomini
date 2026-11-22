@@ -53,10 +53,34 @@ int os_debug_log = 0;
 
 /* ------------------------------------------------------------------ tempo */
 
+/* Standby do OnionOS (um clique no POWER): o keymon para o processo inteiro (SIGSTOP) e so o solta (SIGCONT) quando
+ * o aparelho acorda. O relogio monotonico do Linux continua andando nesse tempo, e o do jogo andava junto: na volta,
+ * os timers do N64 venciam de uma vez, e o da tarefa de desenho (Graph_TaskSet00: 3 s sem o RCP terminar = "RCP
+ * travado") jogava o jogo na tela de erro (Fault, que o port nao desenha): a imagem parava e so a musica seguia
+ * (issue #2; achado no aparelho em 22/11/2026 lendo a pilha da thread do desenho: Fault_WaitForButtonCombo). Aqui o
+ * relogio do jogo nao conta um salto de mais de 500 ms entre duas leituras: o jogo le o relogio a cada retrace
+ * (60 vezes por segundo), entao um salto assim so acontece com o processo parado (ou o jogo todo esperando, e ai
+ * tanto faz). Custo: uma comparacao por leitura; a anotacao da maior leitura so a cada 1 ms. */
+static uint64_t g_last_raw_ns; /* maior leitura do relogio do Linux ate agora (anotada a cada 1 ms) */
+static uint64_t g_paused_ns;   /* tempo em que o processo ficou parado, descontado do relogio do jogo */
+
 uint64_t os_now_ns(void) {
     struct timespec ts;
+    uint64_t raw, last;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+    raw = (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+    last = __atomic_load_n(&g_last_raw_ns, __ATOMIC_RELAXED);
+    if (raw > last + 1000000ull) {
+        while (raw > last && !__atomic_compare_exchange_n(&g_last_raw_ns, &last, raw, 0, __ATOMIC_ACQ_REL,
+                                                          __ATOMIC_RELAXED)) {
+        }
+        if (raw > last && last != 0 && raw - last > 500000000ull) {
+            __atomic_add_fetch(&g_paused_ns, raw - last - 1000000ull, __ATOMIC_ACQ_REL);
+            fprintf(stderr, "[os] o processo ficou parado %.1f s (standby?): o relogio do jogo nao conta esse tempo\n",
+                    (double)(raw - last) / 1e9);
+        }
+    }
+    return raw - __atomic_load_n(&g_paused_ns, __ATOMIC_RELAXED);
 }
 
 static uint64_t ns_to_ticks(uint64_t ns) {
