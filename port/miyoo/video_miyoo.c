@@ -80,6 +80,7 @@ static size_t fb_len;
 static unsigned long fb_phys;
 static int fb_pages; /* 2 = troca de pagina com vsync; 1 = desenha na pagina visivel */
 static int fb_page;
+static volatile int g_panDead; /* a troca de pagina travou no driver (standby): sem FBIOPAN daqui em diante */
 
 /* A tela pode chegar ao jogo em outro modo, deixado pelo programa anterior (o menu do RedOnion fecha o SDL
  * antes de cada programa e o SDL devolve o modo que achou; o Mini v4/Flip usa 752x560). Ja aconteceu de
@@ -1449,7 +1450,7 @@ void miyoo_video_message(const char* text, uint32_t rgb) {
     for (p = text; *p; p++) {
         lines += *p == '\n';
     }
-    page = fb_pages == 2 ? fb_page ^ 1 : 0;
+    page = fb_pages == 2 ? (g_panDead ? fb_page : fb_page ^ 1) : 0;
     dst = fb_page_ptr(page);
     memset(dst, 0, (size_t)PANEL_W * PANEL_H * 4);
     y = (PANEL_H - lines * 40) / 2;
@@ -1464,7 +1465,7 @@ void miyoo_video_message(const char* text, uint32_t rgb) {
         }
         p = e + 1;
     }
-    if (fb_pages == 2) {
+    if (fb_pages == 2 && !g_panDead) {
         fb_var.yoffset = (unsigned)(page * PANEL_H);
         ioctl(fb_fd, FBIOPAN_DISPLAY, &fb_var);
         fb_page = page;
@@ -1780,6 +1781,15 @@ static const uint8_t* pend_tb; /* caixa de texto do quadro novo (NULL = nenhuma)
 static const void* pend_gekey; /* o framebuffer do jogo do quadro novo (as pecas do 2D pelo acelerador vao com ele) */
 static int pend_tr[4];
 static int clock_on;          /* o vsync e o relogio do VI */
+/* Standby do OnionOS (clique no POWER): o keymon para o jogo (SIGSTOP), apaga a tela, poe o processador em economia e
+ * depois volta tudo. As vezes a troca de pagina que estava esperando o vsync nessa hora nunca mais volta do driver
+ * (a thread fica presa no kernel, em estado D, e nada de fora solta: medido em 11/2026). A tela congelava e o jogo
+ * parava junto (o vsync e o relogio dele); so a musica seguia. O vigia (pan_watch) percebe a troca presa ha mais de
+ * 2 s, poe outra thread de tela no lugar e daqui em diante o jogo desenha direto na pagina visivel (pode rasgar a
+ * imagem, mas anda), com um vsync de mentira de 16,75 ms. Ao fechar e reabrir o jogo, volta ao normal. */
+static volatile double g_panSince; /* hora em que a troca de pagina em andamento comecou (0 = nenhuma) */
+static volatile int g_flipGen;     /* muda quando o vigia poe outra thread de tela no lugar */
+static int g_fakeN;                /* vsyncs de mentira que passaram na ultima espera (com g_panDead) */
 static void (*prev_present)(const void*, const OSViMode*, int);
 
 /* Quadros intermediarios (gfx_hook.c, opcao quadros_extras): para cada quadro do jogo chegam as imagens
@@ -1900,8 +1910,85 @@ static void video_hold(int on) {
     pthread_mutex_unlock(&flip_mx);
 }
 
+/* espera de 16,75 ms no lugar do vsync (so com g_panDead). O kernel so acorda de 10 em 10 ms: a espera pode passar
+ * do ponto, entao conta quantos vsyncs de mentira passaram (g_fakeN), para o jogo seguir na velocidade certa */
+static void fake_vsync(void) {
+    static double next;
+    double now = miyoo_now_ms();
+    int n = 0;
+    if (next == 0 || now - next > 100.0) {
+        next = now;
+    }
+    if (next > now) {
+        usleep((useconds_t)((next - now) * 1000.0));
+    }
+    now = miyoo_now_ms();
+    while (next <= now) {
+        next += 16.75;
+        n++;
+    }
+    g_fakeN = n > 0 ? n : 1;
+}
+
+/* mostra a pagina e espera o vsync (FBIOPAN_DISPLAY). Devolve 1 se esta thread de tela foi trocada pelo vigia
+ * enquanto esperava (a troca tinha travado): ela tem de sair sem mexer em mais nada */
+static int fb_pan_wait(int page, int gen) {
+    if (g_panDead) {
+        fake_vsync();
+        return gen != g_flipGen;
+    }
+    fb_var.yoffset = (unsigned)(page * PANEL_H);
+    g_panSince = miyoo_now_ms();
+    ioctl(fb_fd, FBIOPAN_DISPLAY, &fb_var);
+    g_panSince = 0;
+    return gen != g_flipGen;
+}
+
+static void* flip_proc(void* arg);
+
+/* vigia da troca de pagina (veja g_panDead) */
+static void* pan_watch(void* arg) {
+    int same = 0;
+    (void)arg;
+    pt_thread_name("vigia da tela");
+    while (!flip_quit) {
+        const double s = g_panSince;
+        usleep(250000);
+        /* a mesma troca pendente em 8 olhadas seguidas (2 s com o jogo rodando: o tempo do standby em si, com o jogo
+         * parado, nao conta, porque o vigia tambem fica parado) */
+        same = (s != 0 && s == g_panSince) ? same + 1 : 0;
+        if (same >= 8 && !flip_quit) {
+            int x = 0, y = 0;
+            FILE* f = fopen("/sys/class/graphics/fb0/pan", "r"); /* (o ioctl ficaria preso tambem) */
+            pthread_t t;
+            if (f != NULL) {
+                if (fscanf(f, "%d,%d", &x, &y) != 2) {
+                    y = (int)fb_var.yoffset;
+                }
+                fclose(f);
+            }
+            pthread_mutex_lock(&flip_mx);
+            fb_page = y >= PANEL_H ? 1 : 0;
+            g_panDead = 1;
+            g_flipGen++;
+            pthread_cond_broadcast(&flip_cv);
+            pthread_mutex_unlock(&flip_mx);
+            fprintf(stderr, "video: a troca de pagina travou no driver ha %.0f ms (standby?): outra thread de tela, "
+                            "desenhando direto na pagina %d, sem esperar o vsync\n", miyoo_now_ms() - s, fb_page);
+            if (pthread_create(&t, NULL, flip_proc, NULL) == 0) {
+                pthread_detach(t);
+            } else {
+                fprintf(stderr, "video: nao consegui criar a nova thread de tela\n");
+            }
+            break;
+        }
+    }
+    return NULL;
+}
+
 static void* flip_proc(void* arg) {
     int buf = 0, frames = 0, fast = 0, ticks = 0, modeRetry = 0;
+    const int gen = g_flipGen; /* (vigia da troca de pagina) */
     double last_tick = 0, last_print = 0, t_conv = 0, t_ccpu = 0, t_show = 0, tmin = 1e9, tmax = 0;
     (void)arg;
     os_thread_class(OS_RT_VIDEO); /* o vsync e o relogio do jogo: pulso na hora */
@@ -2002,7 +2089,7 @@ static void* flip_proc(void* arg) {
         }
         if (job && fb_mem != NULL) {
             pt_ev(PT_FLIP_PRESENT, (int)(g_vsync - g_rLastV));
-            int back = fb_pages == 2 ? fb_page ^ 1 : 0;
+            int back = fb_pages == 2 ? (g_panDead ? fb_page : fb_page ^ 1) : 0; /* (troca travada: a visivel) */
             uint16_t* cb = conv_buf[buf];
             int isLe = 0, direct = 0;
             {
@@ -2092,9 +2179,10 @@ static void* flip_proc(void* arg) {
             toast_draw(fb_page_ptr(back), back); /* icone de bateria fraca e aviso do estado rapido, por cima de tudo */
             pt_ev(PT_FLIP_PRESENT + 1, 0);
             if (fb_pages == 2) {
-                fb_var.yoffset = (unsigned)(back * PANEL_H);
                 pt_ev(PT_FLIP_VSYNC, 1);
-                ioctl(fb_fd, FBIOPAN_DISPLAY, &fb_var); /* espera o vsync */
+                if (fb_pan_wait(back, gen)) { /* espera o vsync */
+                    return NULL; /* (o vigia ja pos outra thread de tela no lugar) */
+                }
                 pt_ev(PT_FLIP_VSYNC + 1, 1);
                 fb_page = back;
             }
@@ -2111,7 +2199,7 @@ static void* flip_proc(void* arg) {
             }
         } else if (fb_pages == 2 && clock_on && fb_mem != NULL && miyoo_menu_active() && (!g_menuShown || miyoo_menu_dirty())) {
             /* menu de opcoes (menu_miyoo.c): o fundo e a ultima imagem do jogo, escurecida, guardada ao abrir */
-            const int back = fb_page ^ 1;
+            const int back = g_panDead ? fb_page : fb_page ^ 1;
             const size_t n = (size_t)MENU_W * MENU_H; /* (o menu e o fundo dele: 640x480) */
             const int same = PANEL_W == MENU_W && PANEL_H == MENU_H;
             if (!g_menuShown) {
@@ -2221,21 +2309,23 @@ static void* flip_proc(void* arg) {
                     battery_draw(fb_page_ptr(back));
                 }
             }
-            fb_var.yoffset = (unsigned)(back * PANEL_H);
-            ioctl(fb_fd, FBIOPAN_DISPLAY, &fb_var); /* espera o vsync */
+            if (fb_pan_wait(back, gen)) { /* espera o vsync */
+                return NULL;
+            }
             fb_page = back;
         menu_skip:;
         } else if (fb_pages == 2 && clock_on) {
-            fb_var.yoffset = (unsigned)(fb_page * PANEL_H); /* mesma pagina: so espera o vsync */
             pt_ev(PT_FLIP_VSYNC, 0);
-            ioctl(fb_fd, FBIOPAN_DISPLAY, &fb_var);
+            if (fb_pan_wait(fb_page, gen)) { /* mesma pagina: so espera o vsync */
+                return NULL;
+            }
             pt_ev(PT_FLIP_VSYNC + 1, 0);
         }
 
         if (clock_on && fb_pages == 2) {
             double now = miyoo_now_ms();
             int missed = 0;
-            if (last_tick != 0 && now - last_tick < 8.0) {
+            if (!g_panDead && last_tick != 0 && now - last_tick < 8.0) {
                 /* a troca de pagina nao esperou o vsync: isto nao e um relogio */
                 if (++fast > 30 && !modeRetry) {
                     /* 1a vez: poe o modo da tela de novo e mede outra vez */
@@ -2265,7 +2355,7 @@ static void* flip_proc(void* arg) {
                     tmax = d;
                 }
                 /* uma volta que passou de um vsync (quadro demorado) entrega os pulsos que faltaram */
-                missed = (int)(d / 16.75 + 0.5) - 1;
+                missed = g_panDead ? g_fakeN - 1 : (int)(d / 16.75 + 0.5) - 1;
                 if (missed > 3) {
                     missed = 3;
                 }
@@ -2360,6 +2450,12 @@ void miyoo_video_start(void) {
     }
     if (pthread_create(&flip_thread, NULL, flip_proc, NULL) == 0) {
         flip_started = 1;
+        if (fb_pages == 2) {
+            pthread_t w;
+            if (pthread_create(&w, NULL, pan_watch, NULL) == 0) {
+                pthread_detach(w);
+            }
+        }
     } else {
         fprintf(stderr, "video: nao consegui criar a thread de tela\n");
     }
@@ -2491,7 +2587,7 @@ void miyoo_video_shutdown(void) {
     }
     if (fb_mem != NULL) {
         memset(fb_mem, 0, fb_pages == 2 ? (size_t)PANEL_W * PANEL_H * 8 : (size_t)PANEL_W * PANEL_H * 4);
-        if (fb_pages == 2) {
+        if (fb_pages == 2 && !g_panDead) {
             fb_var.yoffset = 0;
             ioctl(fb_fd, FBIOPAN_DISPLAY, &fb_var);
         }
