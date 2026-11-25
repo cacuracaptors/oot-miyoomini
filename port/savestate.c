@@ -112,11 +112,17 @@ typedef struct {
     uint32_t payload; /* bytes da copia (RAM + dados + BSS, completados ate a pagina) */
     uint32_t pages;   /* paginas no arquivo (as outras sao zeros) */
     uint32_t pbgW, pbgH, pbgLv, pbgLen; /* fundo do menu de pausa em resolucao maior (gfx_hires.c), depois da copia */
+    uint32_t hdLen; /* origem (na ROM) das paginas da RAM para as texturas novas (gfx_hd.c), depois do fundo da pausa */
 } SsHdr;
 
 /* gfx_hires.c (fracos: o teste no PC tambem os tem, mas assim o modulo fica independente) */
 int gx_hr_pbg_get(const void** px, int* w, int* h, int* lv) __attribute__((weak));
 void gx_hr_pbg_set(const void* px, int w, int h, int lv) __attribute__((weak));
+/* gfx_hd.c: sem a origem das paginas, depois de continuar um estado as texturas ja na memoria (a logo HD da abertura)
+ * nao sao reconhecidas e voltam a ser as originais */
+uint32_t gx_hd_pages_size(uint32_t ram) __attribute__((weak));
+void gx_hd_pages_get(void* dst, uint32_t len) __attribute__((weak));
+void gx_hd_pages_set(const void* src, uint32_t len) __attribute__((weak));
 
 volatile int port_ss_req; /* 1 = salvar, 2 = carregar o estado rapido (botoes) */
 
@@ -296,11 +302,14 @@ static uint8_t* snapshot(uint16_t seqMain, uint16_t seqSub, uint8_t* buf, size_t
         h.pbgLv = (uint32_t)plv;
         h.pbgLen = (uint32_t)(pw * ph * 2);
     }
-    if (buf != NULL && *len != sizeof h + h.payload + h.pbgLen) {
+    if (gx_hd_pages_size != NULL && gx_hd_pages_get != NULL) {
+        h.hdLen = gx_hd_pages_size(h.ram);
+    }
+    if (buf != NULL && *len != sizeof h + h.payload + h.pbgLen + h.hdLen) {
         free(buf);
         buf = NULL;
     }
-    *len = sizeof h + h.payload + h.pbgLen;
+    *len = sizeof h + h.payload + h.pbgLen + h.hdLen;
     if (buf == NULL) {
         buf = malloc(*len);
         if (buf == NULL) {
@@ -319,6 +328,9 @@ static uint8_t* snapshot(uint16_t seqMain, uint16_t seqSub, uint8_t* buf, size_t
     if (h.pbgLen) {
         memcpy(buf + sizeof h + h.payload, pbg, h.pbgLen);
     }
+    if (h.hdLen) {
+        gx_hd_pages_get(buf + sizeof h + h.payload + h.pbgLen, h.hdLen);
+    }
     return buf;
 }
 
@@ -334,6 +346,9 @@ static void restore(const uint8_t* buf) {
     memcpy(__start_game_bss, p, h.bssLen);
     if (gx_hr_pbg_set != NULL) { /* o fundo da pausa do estado (ou nenhum: o de agora seria de outro momento) */
         gx_hr_pbg_set(h.pbgLen ? buf + sizeof h + h.payload : NULL, (int)h.pbgW, (int)h.pbgH, (int)h.pbgLv);
+    }
+    if (gx_hd_pages_set != NULL) { /* (sem ela no estado: nenhuma origem; a de agora seria de outro momento) */
+        gx_hd_pages_set(h.hdLen ? buf + sizeof h + h.payload + h.pbgLen : NULL, h.hdLen);
     }
 }
 
@@ -393,6 +408,9 @@ static int write_state(const char* path, const uint8_t* buf) {
         if (ok && h.pbgLen && fwrite(pay + h.payload, 1, h.pbgLen, f) != h.pbgLen) {
             ok = 0;
         }
+        if (ok && h.hdLen && fwrite(pay + h.payload + h.pbgLen, 1, h.hdLen, f) != h.hdLen) {
+            ok = 0;
+        }
         if (ok && (fflush(f) != 0 || fsync(fileno(f)) != 0)) {
             ok = 0;
         }
@@ -431,14 +449,14 @@ static int read_state(const char* path, uint8_t** out, size_t* outLen) {
         fclose(f);
         return -1;
     }
-    if (h.pbgLen != h.pbgW * h.pbgH * 2u || h.pbgLen > 752u * 560u * 2u) {
+    if (h.pbgLen != h.pbgW * h.pbgH * 2u || h.pbgLen > 752u * 560u * 2u || h.hdLen > (16u << 20) / PAGE * 64u) {
         fclose(f);
         return -1;
     }
     np = h.payload / PAGE;
     nbm = (np + 7) / 8;
     bm = malloc(nbm);
-    buf = malloc(sizeof h + h.payload + h.pbgLen);
+    buf = malloc(sizeof h + h.payload + h.pbgLen + h.hdLen);
     if (bm != NULL && buf != NULL && fread(bm, 1, nbm, f) == nbm) {
         uint8_t* pay = buf + sizeof h;
         unsigned got = 0;
@@ -460,6 +478,9 @@ static int read_state(const char* path, uint8_t** out, size_t* outLen) {
         if (r == 1 && h.pbgLen && fread(pay + h.payload, 1, h.pbgLen, f) != h.pbgLen) {
             r = -1;
         }
+        if (r == 1 && h.hdLen && fread(pay + h.payload + h.pbgLen, 1, h.hdLen, f) != h.hdLen) {
+            r = -1;
+        }
     }
     fclose(f);
     free(bm);
@@ -468,7 +489,7 @@ static int read_state(const char* path, uint8_t** out, size_t* outLen) {
         return -1;
     }
     *out = buf;
-    *outLen = sizeof h + h.payload + h.pbgLen;
+    *outLen = sizeof h + h.payload + h.pbgLen + h.hdLen;
     return 1;
 }
 

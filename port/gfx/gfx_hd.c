@@ -267,6 +267,25 @@ void port_rom_note(uint32_t off, void *ram, uint32_t n) {
     }
 }
 
+/* estados salvos (savestate.c): a origem das paginas da RAM vai junto com a memoria. Sem ela, depois de continuar um
+ * estado (o Game Switcher, um estado rapido) as texturas que ja estavam na memoria ficavam sem origem e voltavam a ser as
+ * originais (a logo HD da abertura virava a antiga). */
+uint32_t gx_hd_pages_size(uint32_t ram) {
+    const uint32_t np = ram / 4096u;
+    return g_ready && np <= RAM_PAGES ? np * (uint32_t)sizeof(PageRec) : 0;
+}
+
+void gx_hd_pages_get(void *dst, uint32_t len) {
+    memcpy(dst, g_page, len <= sizeof g_page ? len : sizeof g_page);
+}
+
+void gx_hd_pages_set(const void *src, uint32_t len) {
+    memset(g_page, 0, sizeof g_page);
+    if (src != NULL && g_ready && len <= sizeof g_page && len % sizeof(PageRec) == 0) {
+        memcpy(g_page, src, len);
+    }
+}
+
 static uint32_t vrom_of(const uint8_t *ptr) {
     uint32_t a = (uint32_t)(uintptr_t)ptr, p;
     const PageRec *pr;
