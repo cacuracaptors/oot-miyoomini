@@ -220,6 +220,7 @@ int port_opt_clock_guard = 1; /* 1 = se o clock da CPU cair sozinho durante o jo
 extern int gx_agua_meia, gx_mistura_meia, gx_amp_meia, gx_transp_meia, gx_ceu_meia, gx_recorte_meia; /* gfx_fast.inc: texturas em meia resolucao (lote 247) */
 extern int gx_mistura_desliza;           /* gfx_fast.inc: texturas que deslizam pre-misturadas (lote 183) */
 extern int gx_ceu_mistura, gx_corte; /* gfx_fast.inc: ceu pre-misturado e recorte (teste da lentidao) */
+extern int gx_crackfill; /* gfx_fast.inc: tapa-frestas de 1-2 pixels entre pecas do cenario */
 extern int port_fi_enabled;      /* port/frame_interp.c: quadros intermediarios (30 por segundo) */
 extern int port_opt_idioma;      /* port/lang.c: pacote de idioma */
 extern int port_opt_extra_adiado; /* port/gfx/gfx_hook.c: quadro do jogo desenhado depois do 1/3 */
@@ -621,6 +622,8 @@ static const struct {
       "1 = surfaces that blend two textures (moving walls and floor of Zora's Domain, waterfalls) read them on every other pixel and each point is used for the pixel next to it too: lighter there, may look a bit softer (default); 0 = every pixel, like the original" },
     { "Graphics", "lens_flare", "", &port_opt_lens_flare,
       "1 = the sun's lens flare (the colored circles and the glare when looking at the sun) like the original; 0 = off (lighter: when the sun shows they cover a good part of the screen with transparency)" },
+    { "Graphics", "crack_fill", "", &gx_crackfill,
+      "1 = 1-2 pixel cracks between two pieces of scenery (light dots flickering where they meet, e.g. the trees and the cliff in the intro, under the log tunnel) are filled with the neighboring pixel, as the console's video output hides them (default; a few pixels a frame); 0 = left open" },
     { "Graphics", "hd_title_logo", "", &port_opt_hd_logo,
       "1 = the title screen logo uses the new high-resolution textures from texturas_hd.pak (except the copyright line), 0 = the original logo" },
     /* ---------------------------------------------------------------- Performance */
@@ -1008,6 +1011,7 @@ static const struct {
     { "half_res_sky", 1 },
     { "half_res_cutout", 1 },
     { "light_hit_marks", 1 },
+    { "crack_fill", 1 },
     { "fast_magnified_textures", 0 },
     { "hd_title_logo", 1 },
     { "text_box_320", 0 },

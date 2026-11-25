@@ -4079,6 +4079,26 @@ int gx_bgdefer = 1;
 int gx_bgmix = 1; /* 1 = camadas misturadas do fundo tambem adiadas */
 static int g_bgState, g_bgFirst, g_bgLast, g_bgY0, g_bgY1;
 static const uint8_t *g_bgCimg;
+static uint8_t *g_bgZimg; /* profundidade dos trabalhos que marcam a mascara (tapa-frestas) */
+
+/* Tapa-frestas (opcao crack_fill): duas pecas do cenario que deveriam se encostar deixam as vezes uma fresta de 1 pixel
+ * (o paredao de arvores e o topo do morro na abertura, tracinhos azul-claros que piscam com a camera andando; 2 pixels
+ * nas resolucoes maiores). No N64
+ * ela nao aparece: a suavizacao das bordas da saida de video cobre o pixel com os vizinhos. Aqui, ao desenhar o fundo
+ * adiado, cada trecho curto da mascara onde nada da cena escreveu vira candidato (custo: uma comparacao por trecho);
+ * no fim da fila, com as duas threads paradas, o pixel mais longe que o de cima e o de baixo (ou, num trecho de 1
+ * pixel, que os dos lados) recebe a cor e a profundidade do vizinho; com 2 linhas (ou colunas) de fresta, do vizinho mais
+ * perto. Poucos pixels por quadro (medido: ate ~100 pixels conferidos, nas capturas da abertura). */
+int gx_crackfill = 1;
+#define CRK_MAX 512 /* candidatos por thread e por fila */
+#define CRK_LEN 48  /* trechos livres maiores que isso sao ceu de verdade */
+typedef struct {
+    uint8_t *c, *z;
+    int16_t y, x0, x1, y0, y1; /* y0..y1: linhas da janela (so ali ha profundidade marcada) */
+    uint16_t w;
+} CrkRun;
+static CrkRun g_crk[2][CRK_MAX];
+static int g_ncrk[2];
 
 static void bg_end(void) {
     GxJob *j;
@@ -4102,6 +4122,7 @@ static void bg_end(void) {
     j->x1 = g_bgLast;
     j->y0 = g_bgY0; /* linhas que a janela marcou (y0 > y1: nenhuma) */
     j->y1 = g_bgY1;
+    j->cimg = g_bgZimg; /* (tapa-frestas) profundidade da janela; NULL = nenhum trabalho com profundidade */
     batch_publish();
 }
 
@@ -4138,6 +4159,7 @@ static int bg_pre(const FastProg *f, int useZ, int ys, int ye) {
             g_bgState = 2;
             g_bgY0 = ys < 0 ? 0 : ys;
             g_bgY1 = ye;
+            g_bgZimg = useZ && f->zimg != NULL && f->cwidth == g_progs[g_jobs[g_bgFirst].prog].cwidth ? f->zimg : NULL;
             return JOBF_COVW;
         }
         bg_end();
@@ -4148,6 +4170,9 @@ static int bg_pre(const FastProg *f, int useZ, int ys, int ye) {
             }
             if (ye > g_bgY1) {
                 g_bgY1 = ye;
+            }
+            if (g_bgZimg == NULL && useZ && f->zimg != NULL && f->cwidth == g_progs[g_jobs[g_bgFirst].prog].cwidth) {
+                g_bgZimg = f->zimg;
             }
             return JOBF_COVW;
         }
@@ -4162,6 +4187,7 @@ static int bg_pre(const FastProg *f, int useZ, int ys, int ye) {
         g_bgState = 1;
         g_bgFirst = g_bgLast = g_nJobs;
         g_bgCimg = f->cimg;
+        g_bgZimg = NULL;
         g_bgY0 = 1;
         g_bgY1 = 0;
         return JOBF_DEFER;
@@ -4497,6 +4523,9 @@ static void run_bg(FastCtx *ctx, int band, int nb, const GxJob *e) {
     int i, y;
     const uint8_t *own = ctx->own ? ctx->own : g_own;
     const int useRuns = gx_bg_trechos && e->y0 <= e->y1;
+    const int ti = ctx == &g_ctx[1] ? 1 : 0;
+    uint8_t *const crkZ = gx_crackfill ? e->cimg : NULL; /* (bg_end: a profundidade da janela) */
+    uint8_t *crkC = NULL;
     ctx->covR = e->y0 <= e->y1; /* janela sem nada marcado: desenha o fundo inteiro, sem a mascara */
     if (useRuns) {
         /* trechos livres das linhas desta thread (fora de y0..y1 nada foi marcado: a linha inteira) */
@@ -4504,6 +4533,7 @@ static void run_bg(FastCtx *ctx, int band, int nb, const GxJob *e) {
         for (i = e->x0; i <= e->x1; i++) {
             if (g_jobs[i].flags & JOBF_DEFER) {
                 w = g_progs[g_jobs[i].prog].cwidth;
+                crkC = g_progs[g_jobs[i].prog].cimg;
                 break;
             }
         }
@@ -4538,6 +4568,17 @@ static void run_bg(FastCtx *ctx, int band, int nb, const GxJob *e) {
                     g_bgRun[y][n][0] = (int16_t)x;
                     g_bgRun[y][n][1] = (int16_t)x1;
                     n++;
+                    if (crkZ != NULL && crkC != NULL && x1 - x < CRK_LEN && y > e->y0 && y < e->y1 && g_ncrk[ti] < CRK_MAX) {
+                        CrkRun *const r = &g_crk[ti][g_ncrk[ti]++];
+                        r->c = crkC;
+                        r->z = crkZ;
+                        r->y = (int16_t)y;
+                        r->x0 = (int16_t)x;
+                        r->x1 = (int16_t)x1;
+                        r->y0 = (int16_t)e->y0;
+                        r->y1 = (int16_t)e->y1;
+                        r->w = (uint16_t)w;
+                    }
                     x = x1 + 1;
                 }
                 g_bgNRun[y] = (int8_t)n;
@@ -4931,6 +4972,58 @@ static void batch_publish(void) {
     }
 }
 
+static inline uint32_t crk_z(const uint8_t *p) {
+    return ((uint32_t)p[0] << 8) | p[1]; /* (profundidade na ordem do N64: sobe com a distancia) */
+}
+
+/* tapa-frestas: depois das duas threads (ver gx_crackfill). Lado de uma fresta de ate 2 pixels: 1 = o vizinho colado e mais
+ * perto; 2 = o colado tambem e fresta (tao longe quanto) e o seguinte e mais perto; 0 = nao fecha */
+static inline int crk_side(const uint8_t *zp, long d, uint32_t z, int room) {
+    if (room >= 1 && crk_z(zp + d) < z) {
+        return 1;
+    }
+    if (room >= 2 && crk_z(zp + d) >= z && crk_z(zp + 2 * d) < z) {
+        return 2;
+    }
+    return 0;
+}
+
+static void crack_fill(void) {
+    int t, k, x;
+    for (t = 0; t < 2; t++) {
+        for (k = 0; k < g_ncrk[t]; k++) {
+            const CrkRun *const r = &g_crk[t][k];
+            const long st = (long)r->w * 2;
+            const size_t row = (size_t)r->y * (size_t)st;
+            const int up = r->y - r->y0, dn = r->y1 - r->y, len = r->x1 - r->x0 + 1;
+            for (x = r->x0; x <= r->x1; x++) {
+                uint8_t *const zp = r->z + row + (size_t)x * 2u;
+                uint8_t *const cp = r->c + row + (size_t)x * 2u;
+                const uint32_t z = crk_z(zp);
+                long o = 0;
+                int a = crk_side(zp, -st, z, up), b = a ? crk_side(zp, st, z, dn) : 0;
+                if (a && b && a + b <= 3) {
+                    o = a <= b ? -st * a : st * b; /* fresta deitada: o vizinho de cima ou de baixo mais perto */
+                } else if (len <= 2) {
+                    /* fresta em pe (o trecho livre tem 1 ou 2 pixels; os dos lados foram escritos) */
+                    a = x - r->x0 + 1;
+                    b = r->x1 - x + 1;
+                    if (r->x0 > 0 && r->x1 + 1 < (int)r->w && crk_z(zp - 2 * a) < z && crk_z(zp + 2 * b) < z) {
+                        o = a <= b ? -2 * a : 2 * b;
+                    }
+                }
+                if (o != 0) {
+                    cp[0] = cp[o];
+                    cp[1] = cp[o + 1];
+                    zp[0] = zp[o];
+                    zp[1] = zp[o + 1];
+                }
+            }
+        }
+        g_ncrk[t] = 0;
+    }
+}
+
 void gx_batch_flush(void) {
     if (g_nJobs == 0) {
         return;
@@ -5042,6 +5135,9 @@ void gx_batch_flush(void) {
         run_jobs(&g_ctx[0], 0, 1, 0, g_nJobs);
         PT_EV(PT_DRAW_RASTER + 1, 0);
         gx_raster_ns += fast_now_ns() - t0;
+    }
+    if (g_ncrk[0] | g_ncrk[1]) {
+        crack_fill();
     }
     if (gx_hidden_stats) {
         hid_print();
