@@ -379,6 +379,9 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "--sem-mistura-desliza")) {
             extern int gx_mistura_desliza;
             gx_mistura_desliza = 0; /* texturas que deslizam misturadas por pixel (como antes do lote 183) */
+        } else if (!strcmp(argv[i], "--tapa") && i + 1 < argc) {
+            extern int gx_crackfill;
+            gx_crackfill = atoi(argv[++i]); /* tapa-frestas: 0 desligado, 1 so o fundo adiado, 2 o quadro inteiro */
         } else if (!strcmp(argv[i], "--sem-fundo-trechos")) {
             extern int gx_bg_trechos;
             gx_bg_trechos = 0; /* fundo adiado desenhado pela mascara em cada pixel (como antes do lote 195) */

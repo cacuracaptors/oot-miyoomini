@@ -4092,6 +4092,11 @@ static uint8_t *g_bgZimg; /* profundidade dos trabalhos que marcam a mascara (ta
 int gx_crackfill = 1;
 #define CRK_MAX 512 /* candidatos por thread e por fila */
 #define CRK_LEN 48  /* trechos livres maiores que isso sao ceu de verdade */
+/* so um pixel onde nada gravou profundidade no quadro (ainda com a do comeco, a mais longe) pode ser fresta: um "trecho
+ * livre" da janela do fundo tambem pode ter sido desenhado ANTES dela abrir (a janela da sombra do Link dormindo abre
+ * depois dele e da cama ja desenhados): esse e o desenho do jogo, nao uma fresta, e fica (sem isso o contorno de baixo do
+ * Link virava blocos, v1.2.2) */
+#define CRK_ZCLR 0xFFFCu
 typedef struct {
     uint8_t *c, *z;
     int16_t y, x0, x1, y0, y1; /* y0..y1: linhas da janela (so ali ha profundidade marcada) */
@@ -4099,6 +4104,9 @@ typedef struct {
 } CrkRun;
 static CrkRun g_crk[2][CRK_MAX];
 static int g_ncrk[2];
+/* a cor de cada candidato logo depois do fundo: no fim da fila, um pixel que mudou de cor desde entao foi desenhado por
+ * cima (a sombra do Link dormindo, um efeito sem profundidade) e fica como esta (sem isso o contorno dele virava blocos) */
+static uint16_t g_crkPx[2][CRK_MAX * CRK_LEN];
 
 static void bg_end(void) {
     GxJob *j;
@@ -4526,6 +4534,7 @@ static void run_bg(FastCtx *ctx, int band, int nb, const GxJob *e) {
     const int ti = ctx == &g_ctx[1] ? 1 : 0;
     uint8_t *const crkZ = gx_crackfill ? e->cimg : NULL; /* (bg_end: a profundidade da janela) */
     uint8_t *crkC = NULL;
+    const int crk0 = g_ncrk[ti];
     ctx->covR = e->y0 <= e->y1; /* janela sem nada marcado: desenha o fundo inteiro, sem a mascara */
     if (useRuns) {
         /* trechos livres das linhas desta thread (fora de y0..y1 nada foi marcado: a linha inteira) */
@@ -4616,6 +4625,11 @@ static void run_bg(FastCtx *ctx, int band, int nb, const GxJob *e) {
         if (row_mine_t(own, y, band, nb)) {
             memset(g_cov[y], 0, COV_W);
         }
+    }
+    for (i = crk0; i < g_ncrk[ti]; i++) { /* (tapa-frestas: a cor do fundo nos candidatos, linhas desta thread) */
+        const CrkRun *const r = &g_crk[ti][i];
+        memcpy(&g_crkPx[ti][i * CRK_LEN], r->c + (size_t)r->y * r->w * 2u + (size_t)r->x0 * 2u,
+               (size_t)(r->x1 - r->x0 + 1) * 2u);
     }
 }
 
@@ -4976,6 +4990,7 @@ static inline uint32_t crk_z(const uint8_t *p) {
     return ((uint32_t)p[0] << 8) | p[1]; /* (profundidade na ordem do N64: sobe com a distancia) */
 }
 
+
 /* tapa-frestas: depois das duas threads (ver gx_crackfill). Lado de uma fresta de ate 2 pixels: 1 = o vizinho colado e mais
  * perto; 2 = o colado tambem e fresta (tao longe quanto) e o seguinte e mais perto; 0 = nao fecha */
 static inline int crk_side(const uint8_t *zp, long d, uint32_t z, int room) {
@@ -5001,15 +5016,23 @@ static void crack_fill(void) {
                 uint8_t *const cp = r->c + row + (size_t)x * 2u;
                 const uint32_t z = crk_z(zp);
                 long o = 0;
-                int a = crk_side(zp, -st, z, up), b = a ? crk_side(zp, st, z, dn) : 0;
+                int a, b;
+                if (z < CRK_ZCLR || memcmp(cp, &g_crkPx[t][k * CRK_LEN + (x - r->x0)], 2) != 0) {
+                    continue; /* algo ja desenhado antes da janela, ou por cima depois do fundo: fica */
+                }
+                a = crk_side(zp, -st, z, up);
+                b = a ? crk_side(zp, st, z, dn) : 0;
                 if (a && b && a + b <= 3) {
-                    o = a <= b ? -st * a : st * b; /* fresta deitada: o vizinho de cima ou de baixo mais perto */
+                    /* fresta deitada: recebe a cor do vizinho de tras (o de cima ou o de baixo mais longe), como se a
+                     * peca de tras continuasse por baixo da da frente: o contorno do que esta na frente nao muda (a
+                     * borda de baixo do Link dormindo na cama virava blocos com a cor do vizinho mais perto) */
+                    o = crk_z(zp - st * a) >= crk_z(zp + st * b) ? -st * a : st * b;
                 } else if (len <= 2) {
                     /* fresta em pe (o trecho livre tem 1 ou 2 pixels; os dos lados foram escritos) */
                     a = x - r->x0 + 1;
                     b = r->x1 - x + 1;
                     if (r->x0 > 0 && r->x1 + 1 < (int)r->w && crk_z(zp - 2 * a) < z && crk_z(zp + 2 * b) < z) {
-                        o = a <= b ? -2 * a : 2 * b;
+                        o = crk_z(zp - 2 * a) >= crk_z(zp + 2 * b) ? -2 * a : 2 * b; /* (o de tras, idem) */
                     }
                 }
                 if (o != 0) {
